@@ -1,0 +1,710 @@
+{
+  "id": "EXP-20261014-124447-7845",
+  "config": {
+    "protocol": "TCP",
+    "packet_count": 60,
+    "packet_size": 550,
+    "interval_ms": 95,
+    "payload_pattern": "text-like",
+    "direction": "client->server",
+    "payload_mode": "random",
+    "custom_text": "Antigravity Protocol Mimicry Lab: Transmission active over loopback sockets."
+  },
+  "features_before": {
+    "packet_count": 60,
+    "total_bytes": 33000,
+    "duration": 5.7111,
+    "mean_size": 550.0,
+    "median_size": 550.0,
+    "min_size": 550,
+    "max_size": 550,
+    "std_size": 0.0,
+    "size_histogram": {
+      "0-150": 0,
+      "151-300": 0,
+      "301-600": 60,
+      "601-1000": 0,
+      "1001-1500": 0
+    },
+    "mean_ipt_ms": 96.8,
+    "median_ipt_ms": 95.78,
+    "std_ipt_ms": 5.54,
+    "jitter_ms": 2.28,
+    "burst_count": 60,
+    "mean_burst_length": 1.0,
+    "packets_per_sec": 10.51,
+    "bytes_per_sec": 5778.2,
+    "forward_count": 60,
+    "reverse_count": 0,
+    "forward_reverse_ratio": 60.0,
+    "protocol": "TCP",
+    "ipt_series_sample": [
+      95.84,
+      95.68,
+      96.01,
+      95.92,
+      95.83,
+      126.64,
+      95.96,
+      95.71,
+      95.88,
+      96.15,
+      95.71,
+      95.81,
+      95.58,
+      95.69,
+      95.58,
+      96.29,
+      95.78,
+      95.91,
+      96.06,
+      95.49,
+      95.95,
+      95.87,
+      95.69,
+      95.77,
+      95.95,
+      96.0,
+      95.59,
+      95.91,
+      95.9,
+      125.58,
+      95.56,
+      95.9,
+      95.62,
+      95.73,
+      95.6,
+      95.63,
+      95.7,
+      95.56,
+      95.39,
+      95.45,
+      95.79,
+      95.61,
+      95.71,
+      95.84,
+      95.61,
+      95.51,
+      96.01,
+      96.08,
+      95.62,
+      95.68,
+      95.67,
+      95.96,
+      95.84,
+      95.74,
+      95.86,
+      95.8,
+      95.47,
+      95.65,
+      95.8
+    ],
+    "experiment_id": "EXP-20261014-124447-7845",
+    "trace_file": "EXP-20261014-124447-7845.csv"
+  },
+  "classification_before": {
+    "detected_category": "bulk_transfer",
+    "category_name": "Bulk-Transfer / TCP-like Baseline",
+    "confidence": 96.9,
+    "label": "High",
+    "explanation": "Flow matched 'Bulk-Transfer / TCP-like Baseline' with High confidence (96.9%). Observable characteristics strongly aligned with packet size (550 B), inter-packet cadence (96.8 ms), flow count (60 packets), burst length (1.0) & jitter (2.3 ms), transport protocol (TCP). All 5 inspection heuristic rules satisfied target profile bounds.",
+    "profile_scores": {
+      "web_browsing": 92.4,
+      "dns_lookup": 52.3,
+      "voip_call": 36.4,
+      "video_stream": 38.7,
+      "bulk_transfer": 96.9
+    },
+    "profile_details": {
+      "web_browsing": {
+        "name": "HTTP-like Web Browsing",
+        "score": 92.4,
+        "rules": {
+          "packet_size": {
+            "score": 1.0,
+            "weight": 0.25,
+            "pass": true
+          },
+          "timing": {
+            "score": 1.0,
+            "weight": 0.25,
+            "pass": true
+          },
+          "volume": {
+            "score": 1.0,
+            "weight": 0.15,
+            "pass": true
+          },
+          "burst_jitter": {
+            "score": 0.621,
+            "weight": 0.2,
+            "pass": true
+          },
+          "transport": {
+            "score": 1.0,
+            "weight": 0.15,
+            "pass": true
+          }
+        }
+      },
+      "dns_lookup": {
+        "name": "DNS-like Query Flow",
+        "score": 52.3,
+        "rules": {
+          "packet_size": {
+            "score": 0.0,
+            "weight": 0.25,
+            "pass": false
+          },
+          "timing": {
+            "score": 1.0,
+            "weight": 0.25,
+            "pass": true
+          },
+          "volume": {
+            "score": 0.562,
+            "weight": 0.15,
+            "pass": false
+          },
+          "burst_jitter": {
+            "score": 0.946,
+            "weight": 0.2,
+            "pass": true
+          },
+          "transport": {
+            "score": 0.0,
+            "weight": 0.15,
+            "pass": false
+          }
+        }
+      },
+      "voip_call": {
+        "name": "VoIP-like Audio Stream",
+        "score": 36.4,
+        "rules": {
+          "packet_size": {
+            "score": 0.057,
+            "weight": 0.25,
+            "pass": false
+          },
+          "timing": {
+            "score": 0.0,
+            "weight": 0.25,
+            "pass": false
+          },
+          "volume": {
+            "score": 1.0,
+            "weight": 0.15,
+            "pass": true
+          },
+          "burst_jitter": {
+            "score": 1.0,
+            "weight": 0.2,
+            "pass": true
+          },
+          "transport": {
+            "score": 0.0,
+            "weight": 0.15,
+            "pass": false
+          }
+        }
+      },
+      "video_stream": {
+        "name": "Video-Streaming-like",
+        "score": 38.7,
+        "rules": {
+          "packet_size": {
+            "score": 0.0,
+            "weight": 0.25,
+            "pass": false
+          },
+          "timing": {
+            "score": 0.0,
+            "weight": 0.25,
+            "pass": false
+          },
+          "volume": {
+            "score": 0.75,
+            "weight": 0.15,
+            "pass": true
+          },
+          "burst_jitter": {
+            "score": 0.625,
+            "weight": 0.2,
+            "pass": true
+          },
+          "transport": {
+            "score": 1.0,
+            "weight": 0.15,
+            "pass": true
+          }
+        }
+      },
+      "bulk_transfer": {
+        "name": "Bulk-Transfer / TCP-like Baseline",
+        "score": 96.9,
+        "rules": {
+          "packet_size": {
+            "score": 1.0,
+            "weight": 0.25,
+            "pass": true
+          },
+          "timing": {
+            "score": 1.0,
+            "weight": 0.25,
+            "pass": true
+          },
+          "volume": {
+            "score": 1.0,
+            "weight": 0.15,
+            "pass": true
+          },
+          "burst_jitter": {
+            "score": 0.846,
+            "weight": 0.2,
+            "pass": true
+          },
+          "transport": {
+            "score": 1.0,
+            "weight": 0.15,
+            "pass": true
+          }
+        }
+      }
+    },
+    "rule_contributions": {
+      "Packet Size": 25.0,
+      "Inter-Packet Timing": 25.0,
+      "Flow Volume": 15.0,
+      "Burst & Jitter": 16.9,
+      "Transport Match": 15.0
+    }
+  },
+  "mimicry_config": {
+    "target_profile": "voip_call",
+    "target_profile_name": "VoIP-like Audio Stream",
+    "toggles": {
+      "padding": true,
+      "timing": true,
+      "burst": true
+    }
+  },
+  "features_after": {
+    "packet_count": 60,
+    "total_bytes": 9600,
+    "duration": 1.2152,
+    "mean_size": 160.0,
+    "median_size": 160.0,
+    "min_size": 160,
+    "max_size": 160,
+    "std_size": 0.0,
+    "size_histogram": {
+      "0-150": 0,
+      "151-300": 60,
+      "301-600": 0,
+      "601-1000": 0,
+      "1001-1500": 0
+    },
+    "mean_ipt_ms": 20.6,
+    "median_ipt_ms": 20.66,
+    "std_ipt_ms": 1.18,
+    "jitter_ms": 1.44,
+    "burst_count": 40,
+    "mean_burst_length": 1.5,
+    "packets_per_sec": 49.38,
+    "bytes_per_sec": 7900.01,
+    "forward_count": 60,
+    "reverse_count": 0,
+    "forward_reverse_ratio": 60.0,
+    "protocol": "UDP",
+    "ipt_series_sample": [
+      22.25,
+      22.21,
+      20.18,
+      20.21,
+      18.81,
+      20.04,
+      21.87,
+      19.03,
+      20.82,
+      19.2,
+      20.07,
+      19.35,
+      19.97,
+      22.26,
+      20.88,
+      19.99,
+      18.79,
+      21.86,
+      19.53,
+      20.89,
+      19.51,
+      19.03,
+      19.59,
+      21.7,
+      21.1,
+      22.49,
+      20.66,
+      18.67,
+      20.68,
+      22.5,
+      21.58,
+      18.72,
+      22.36,
+      21.06,
+      21.09,
+      22.5,
+      20.54,
+      19.13,
+      19.95,
+      21.78,
+      18.87,
+      19.53,
+      21.75,
+      20.39,
+      20.92,
+      20.92,
+      20.26,
+      20.71,
+      22.65,
+      19.73,
+      20.13,
+      21.29,
+      20.91,
+      22.0,
+      21.21,
+      20.52,
+      19.64,
+      22.35,
+      18.6
+    ],
+    "experiment_id": "EXP-20261014-124447-7845",
+    "trace_file": "EXP-20261014-124447-7845_mimic.csv"
+  },
+  "classification_after": {
+    "detected_category": "voip_call",
+    "category_name": "VoIP-like Audio Stream",
+    "confidence": 100.0,
+    "label": "High",
+    "explanation": "Flow matched 'VoIP-like Audio Stream' with High confidence (100.0%). Observable characteristics strongly aligned with packet size (160 B), inter-packet cadence (20.6 ms), flow count (60 packets), burst length (1.5) & jitter (1.4 ms), transport protocol (UDP). All 5 inspection heuristic rules satisfied target profile bounds.",
+    "profile_scores": {
+      "web_browsing": 71.6,
+      "dns_lookup": 92.0,
+      "voip_call": 100.0,
+      "video_stream": 47.7,
+      "bulk_transfer": 39.7
+    },
+    "profile_details": {
+      "web_browsing": {
+        "name": "HTTP-like Web Browsing",
+        "score": 71.6,
+        "rules": {
+          "packet_size": {
+            "score": 0.886,
+            "weight": 0.25,
+            "pass": true
+          },
+          "timing": {
+            "score": 0.843,
+            "weight": 0.25,
+            "pass": true
+          },
+          "volume": {
+            "score": 1.0,
+            "weight": 0.15,
+            "pass": true
+          },
+          "burst_jitter": {
+            "score": 0.666,
+            "weight": 0.2,
+            "pass": true
+          },
+          "transport": {
+            "score": 0.0,
+            "weight": 0.15,
+            "pass": false
+          }
+        }
+      },
+      "dns_lookup": {
+        "name": "DNS-like Query Flow",
+        "score": 92.0,
+        "rules": {
+          "packet_size": {
+            "score": 1.0,
+            "weight": 0.25,
+            "pass": true
+          },
+          "timing": {
+            "score": 1.0,
+            "weight": 0.25,
+            "pass": true
+          },
+          "volume": {
+            "score": 0.562,
+            "weight": 0.15,
+            "pass": false
+          },
+          "burst_jitter": {
+            "score": 0.929,
+            "weight": 0.2,
+            "pass": true
+          },
+          "transport": {
+            "score": 1.0,
+            "weight": 0.15,
+            "pass": true
+          }
+        }
+      },
+      "voip_call": {
+        "name": "VoIP-like Audio Stream",
+        "score": 100.0,
+        "rules": {
+          "packet_size": {
+            "score": 1.0,
+            "weight": 0.25,
+            "pass": true
+          },
+          "timing": {
+            "score": 1.0,
+            "weight": 0.25,
+            "pass": true
+          },
+          "volume": {
+            "score": 1.0,
+            "weight": 0.15,
+            "pass": true
+          },
+          "burst_jitter": {
+            "score": 1.0,
+            "weight": 0.2,
+            "pass": true
+          },
+          "transport": {
+            "score": 1.0,
+            "weight": 0.15,
+            "pass": true
+          }
+        }
+      },
+      "video_stream": {
+        "name": "Video-Streaming-like",
+        "score": 47.7,
+        "rules": {
+          "packet_size": {
+            "score": 0.0,
+            "weight": 0.25,
+            "pass": false
+          },
+          "timing": {
+            "score": 0.907,
+            "weight": 0.25,
+            "pass": true
+          },
+          "volume": {
+            "score": 0.75,
+            "weight": 0.15,
+            "pass": true
+          },
+          "burst_jitter": {
+            "score": 0.688,
+            "weight": 0.2,
+            "pass": true
+          },
+          "transport": {
+            "score": 0.0,
+            "weight": 0.15,
+            "pass": false
+          }
+        }
+      },
+      "bulk_transfer": {
+        "name": "Bulk-Transfer / TCP-like Baseline",
+        "score": 39.7,
+        "rules": {
+          "packet_size": {
+            "score": 0.314,
+            "weight": 0.25,
+            "pass": false
+          },
+          "timing": {
+            "score": 0.01,
+            "weight": 0.25,
+            "pass": false
+          },
+          "volume": {
+            "score": 1.0,
+            "weight": 0.15,
+            "pass": true
+          },
+          "burst_jitter": {
+            "score": 0.829,
+            "weight": 0.2,
+            "pass": true
+          },
+          "transport": {
+            "score": 0.0,
+            "weight": 0.15,
+            "pass": false
+          }
+        }
+      }
+    },
+    "rule_contributions": {
+      "Packet Size": 25.0,
+      "Inter-Packet Timing": 25.0,
+      "Flow Volume": 15.0,
+      "Burst & Jitter": 20.0,
+      "Transport Match": 15.0
+    }
+  },
+  "comparison": {
+    "target_profile": {
+      "id": "voip_call",
+      "name": "VoIP-like Audio Stream",
+      "transport": "UDP",
+      "description": "Isochronous real-time voice packets (e.g., G.711 / Opus) transmitted at strict 20ms intervals with minimal jitter.",
+      "size_range": [
+        100,
+        220
+      ],
+      "target_size": 160,
+      "ipt_range_ms": [
+        18.0,
+        22.0
+      ],
+      "target_ipt_ms": 20.0,
+      "jitter_range_ms": [
+        0.5,
+        5.0
+      ],
+      "target_jitter_ms": 2.0,
+      "packet_count_range": [
+        30,
+        1000
+      ],
+      "burst_length_range": [
+        1.0,
+        1.5
+      ],
+      "target_burst_length": 1.0,
+      "color": "#16A34A",
+      "icon": "phone"
+    },
+    "deltas": {
+      "mean_size": {
+        "before": 550.0,
+        "after": 160.0,
+        "delta": -390.0,
+        "percent_change": -70.9,
+        "label": "Mean Packet Size (B)"
+      },
+      "median_size": {
+        "before": 550.0,
+        "after": 160.0,
+        "delta": -390.0,
+        "percent_change": -70.9,
+        "label": "Median Packet Size (B)"
+      },
+      "mean_ipt_ms": {
+        "before": 96.8,
+        "after": 20.6,
+        "delta": -76.2,
+        "percent_change": -78.7,
+        "label": "Inter-Packet Time (ms)"
+      },
+      "jitter_ms": {
+        "before": 2.28,
+        "after": 1.44,
+        "delta": -0.84,
+        "percent_change": -36.8,
+        "label": "Jitter (ms)"
+      },
+      "burst_count": {
+        "before": 60.0,
+        "after": 40.0,
+        "delta": -20.0,
+        "percent_change": -33.3,
+        "label": "Burst Count"
+      },
+      "mean_burst_length": {
+        "before": 1.0,
+        "after": 1.5,
+        "delta": 0.5,
+        "percent_change": 50.0,
+        "label": "Mean Burst Length"
+      },
+      "total_bytes": {
+        "before": 33000.0,
+        "after": 9600.0,
+        "delta": -23400.0,
+        "percent_change": -70.9,
+        "label": "Total Volume (B)"
+      },
+      "duration": {
+        "before": 5.71,
+        "after": 1.22,
+        "delta": -4.5,
+        "percent_change": -78.7,
+        "label": "Duration (s)"
+      },
+      "packets_per_sec": {
+        "before": 10.51,
+        "after": 49.38,
+        "delta": 38.87,
+        "percent_change": 369.8,
+        "label": "Packets / sec"
+      },
+      "bytes_per_sec": {
+        "before": 5778.2,
+        "after": 7900.01,
+        "delta": 2121.81,
+        "percent_change": 36.7,
+        "label": "Bytes / sec"
+      }
+    },
+    "classification": {
+      "before": {
+        "category": "bulk_transfer",
+        "name": "Bulk-Transfer / TCP-like Baseline",
+        "confidence": 96.9,
+        "label": "High"
+      },
+      "after": {
+        "category": "voip_call",
+        "name": "VoIP-like Audio Stream",
+        "confidence": 100.0,
+        "label": "High"
+      },
+      "confidence_shift": 3.1
+    },
+    "fooled": true,
+    "fooled_target": true,
+    "category_diverted": true,
+    "similarity_to_target": 100.0,
+    "verdict": "DPI Classifier FOOLED! The transformed traffic successfully convinced the inspection engine that it is 'VoIP-like Audio Stream' with 100.0% confidence.",
+    "status_banner": "CLASSIFIER FOOLED",
+    "banner_type": "success",
+    "overhead": {
+      "original_bytes": 33000,
+      "transformed_bytes": 9600,
+      "extra_bytes_percent": -70.9,
+      "original_duration_sec": 5.7111,
+      "transformed_duration_sec": 1.2152,
+      "added_delay_percent": -78.7,
+      "original_throughput_bps": 5778.2,
+      "transformed_throughput_bps": 7900.01,
+      "throughput_change_percent": 36.7
+    }
+  },
+  "text_preserved": null,
+  "reassembled_text": null,
+  "text_info": {
+    "mode": "random",
+    "length": 0,
+    "preview": ""
+  },
+  "updated_at": "2026-10-14T12:44:55.373260",
+  "created_at": "2026-10-14T12:44:55.373260"
+}

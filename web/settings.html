@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings & Rule Weights - Protocol Mimicry Engine</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside id="appSidebar" class="sidebar"></aside>
+
+    <main class="main-content">
+      <header id="appTopbar" class="topbar"></header>
+
+      <div class="content-body fade-in">
+        <div style="margin-bottom:20px;">
+          <h2 style="font-size:22px; font-weight:800; color:var(--text);">Classifier Tuning & Settings</h2>
+          <p style="color:var(--text-muted); font-size:13px;">
+            Customize heuristic rule contribution weights, confidence categorization thresholds, and burst parameters.
+          </p>
+        </div>
+
+        <!-- Rule Weights Card -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">1. Heuristic Rule Contribution Weights</h3>
+              <p class="card-subtitle">Adjust the relative significance of each observable feature in composite classification</p>
+            </div>
+            <span id="totalWeightBadge" class="badge badge-green">Total: 100%</span>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px;">
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <label class="form-label">Rule 1: Packet Size Pattern</label>
+                <span id="wSizeVal" class="mono" style="font-weight:700; color:var(--primary);">25%</span>
+              </div>
+              <input type="range" id="wSize" class="form-input" min="0" max="60" step="1" value="25">
+              <span class="form-helper">Importance of mean packet size and range fit.</span>
+            </div>
+
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <label class="form-label">Rule 2: Inter-Packet Timing (IPT)</label>
+                <span id="wTimingVal" class="mono" style="font-weight:700; color:var(--primary);">25%</span>
+              </div>
+              <input type="range" id="wTiming" class="form-input" min="0" max="60" step="1" value="25">
+              <span class="form-helper">Importance of pacing delays and arrival intervals.</span>
+            </div>
+
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <label class="form-label">Rule 3: Flow Volume / Packet Count</label>
+                <span id="wVolumeVal" class="mono" style="font-weight:700; color:var(--primary);">15%</span>
+              </div>
+              <input type="range" id="wVolume" class="form-input" min="0" max="50" step="1" value="15">
+              <span class="form-helper">Importance of total flow duration and packet count.</span>
+            </div>
+
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <label class="form-label">Rule 4: Burstiness & Jitter</label>
+                <span id="wBurstVal" class="mono" style="font-weight:700; color:var(--primary);">20%</span>
+              </div>
+              <input type="range" id="wBurst" class="form-input" min="0" max="50" step="1" value="20">
+              <span class="form-helper">Importance of delay variance and packet clustering.</span>
+            </div>
+
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <label class="form-label">Rule 5: Transport Layer Match</label>
+                <span id="wTransportVal" class="mono" style="font-weight:700; color:var(--primary);">15%</span>
+              </div>
+              <input type="range" id="wTransport" class="form-input" min="0" max="50" step="1" value="15">
+              <span class="form-helper">Importance of exact Layer 4 TCP/UDP match.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Confidence Categorization Thresholds -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">2. Confidence Categorization Thresholds</h3>
+              <p class="card-subtitle">Define cutoff scores for High, Moderate, and Low detection labels</p>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <label class="form-label">High Confidence Cutoff (>= X%)</label>
+                <span id="tHighVal" class="mono" style="font-weight:700; color:var(--success);">80%</span>
+              </div>
+              <input type="range" id="tHigh" class="form-input" min="60" max="95" step="1" value="80">
+              <span class="form-helper">Classifications meeting or exceeding this receive 'High' badge.</span>
+            </div>
+
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <label class="form-label">Moderate Confidence Cutoff (>= X%)</label>
+                <span id="tModerateVal" class="mono" style="font-weight:700; color:var(--warning);">50%</span>
+              </div>
+              <input type="range" id="tModerate" class="form-input" min="30" max="75" step="1" value="50">
+              <span class="form-helper">Scores between Moderate and High receive 'Moderate' badge.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
+          <button id="btnResetSettings" class="btn btn-secondary">
+            Reset to Factory Defaults
+          </button>
+          <button id="btnSaveSettings" class="btn btn-primary btn-lg">
+            Save Configuration Changes
+          </button>
+        </div>
+
+      </div>
+
+      <footer id="appFooter" class="app-footer"></footer>
+    </main>
+  </div>
+
+  <script type="module" src="js/settings.js"></script>
+</body>
+</html>

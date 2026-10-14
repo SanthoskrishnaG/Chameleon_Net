@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mimicry Lab - Protocol Mimicry Engine</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <style>
+    .hidden { display: none !important; }
+    .preview-box {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <aside id="appSidebar" class="sidebar"></aside>
+
+    <main class="main-content">
+      <header id="appTopbar" class="topbar"></header>
+      <div id="appStepper" class="pipeline-strip"></div>
+
+      <div class="content-body fade-in" id="mimicryMainContent">
+        <!-- Header Info -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:20px; font-weight:800;">Protocol Mimicry Laboratory</h2>
+            <p style="color:var(--text-muted); font-size:13px;">
+              Experiment ID: <strong id="expIdBadge" class="mono" style="color:var(--primary);">-</strong>
+            </p>
+          </div>
+          <div id="baselineSummary" style="font-size:12px; color:var(--text-muted); background:var(--surface); padding:8px 16px; border-radius:var(--radius-sm); border:1px solid var(--border);">
+            Loading baseline info...
+          </div>
+        </div>
+
+        <!-- 1. Target Profile Selector -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">1. Select Target Application Profile</h3>
+              <p class="card-subtitle">Choose the target statistical profile you want to deceive the classifier into identifying</p>
+            </div>
+          </div>
+          <div id="profileCardsGrid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+            <div>Loading catalog profiles...</div>
+          </div>
+        </div>
+
+        <!-- 2. Independent Mimicry Toggles & Sliders -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">2. Transformation Controls & Tuning</h3>
+              <p class="card-subtitle">Toggle individual statistical reshaping dimensions and fine-tune cadence parameters</p>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:20px;">
+            <!-- Left: 3 Independent Toggles -->
+            <div>
+              <div class="toggle-wrapper">
+                <div>
+                  <strong>Packet Size Padding / Trimming</strong>
+                  <div style="font-size:12px; color:var(--text-muted);">Pads small packets toward target profile distribution.</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="paddingToggle" checked>
+                  <span class="slider-round"></span>
+                </label>
+              </div>
+
+              <div class="toggle-wrapper">
+                <div>
+                  <strong>Inter-Packet Timing Reshaping</strong>
+                  <div style="font-size:12px; color:var(--text-muted);">Dynamically recalculates socket send pauses.</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="timingToggle" checked>
+                  <span class="slider-round"></span>
+                </label>
+              </div>
+
+              <div class="toggle-wrapper">
+                <div>
+                  <strong>Burst Cluster Injection</strong>
+                  <div style="font-size:12px; color:var(--text-muted);">Groups packets into rapid sub-20ms bursts.</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="burstToggle" checked>
+                  <span class="slider-round"></span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Right: Fine-tuning sliders & transport -->
+            <div>
+              <div class="form-group">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                  <label class="form-label">Controlled Jitter Spread</label>
+                  <span id="jitterValDisplay" class="mono" style="font-weight:700; color:var(--primary);">2.0 ms</span>
+                </div>
+                <input type="range" id="jitterSlider" class="form-input" min="0" max="40" step="0.5" value="2.0">
+                <span class="form-helper">Controls random noise added to inter-packet delays.</span>
+              </div>
+
+              <div class="form-group">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                  <label class="form-label">Burst Length Size</label>
+                  <span id="burstValDisplay" class="mono" style="font-weight:700; color:var(--primary);">2 pkts</span>
+                </div>
+                <input type="range" id="burstSlider" class="form-input" min="1" max="10" step="1" value="2">
+                <span class="form-helper">Number of rapid packets per burst cluster.</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Transport Protocol Handling</label>
+                <select id="transportSelect" class="form-select">
+                  <option value="keep_original" selected>Keep Original Socket Transport (Realistic Limitation)</option>
+                  <option value="convert_transport">Switch Socket Transport to Match Target (Full Mimicry)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Limitation Callout -->
+          <div id="transportLimitationNotice" class="hidden" style="background:#FFFBEB; border:1px solid var(--warning-border); color:var(--warning); padding:12px 16px; border-radius:var(--radius-sm); font-size:13px; margin-top:16px;"></div>
+
+          <!-- Live Before / Target Preview -->
+          <div style="margin-top:20px; border-top:1px solid var(--border); padding-top:16px;">
+            <h4 style="font-size:13px; font-weight:700; margin-bottom:12px;">Live Dimension Reshaping Preview</h4>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">
+              <div class="preview-box">
+                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">Mean Packet Size</div>
+                <div style="font-size:16px; font-weight:800; margin:4px 0;">
+                  <span id="previewOriginalSize" style="color:var(--text-muted);">-</span> → <span id="previewTargetSize" style="color:var(--primary);">-</span>
+                </div>
+              </div>
+              <div class="preview-box">
+                <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">Inter-Packet Arrival Time</div>
+                <div style="font-size:16px; font-weight:800; margin:4px 0;">
+                  <span id="previewOriginalIPT" style="color:var(--text-muted);">-</span> → <span id="previewTargetIPT" style="color:var(--primary);">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Apply Mimicry Button -->
+          <div style="margin-top:24px; text-align:right;">
+            <button id="btnApplyMimicry" class="btn btn-primary btn-lg">
+              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h4l3 5m4 6l3 5h4M4 20h4l3-5m4-6l3-5h4"/></svg>
+              Apply Mimicry & Re-transmit Over Loopback
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Results & Overhead (Appears upon re-transmission) -->
+        <div id="resultsContainer" class="hidden">
+          <div id="mimicryVerdictBanner" class="verdict-banner"></div>
+
+          <!-- Overhead Meters -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Real Network Overhead Accounting</h3>
+                <p class="card-subtitle">Trade-offs incurred by applying protocol mimicry padding and timing reshaping</p>
+              </div>
+            </div>
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <span class="metric-label">Extra Bandwidth Volume</span>
+                <div id="extraBytesMeter" class="metric-value" style="color:var(--warning);">+0%</div>
+                <span class="metric-sub">Added payload padding cost</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Added Latency Delay</span>
+                <div id="addedDelayMeter" class="metric-value" style="color:var(--primary);">+0%</div>
+                <span class="metric-sub">Pacing delays introduced</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-label">Throughput Rate Shift</span>
+                <div id="throughputMeter" class="metric-value" style="color:var(--accent);">0%</div>
+                <span class="metric-sub">Effective transfer rate delta</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Message Unchanged Proof Box -->
+          <div id="textProofBox" class="card hidden" style="border-left:4px solid var(--success);">
+            <div class="card-header" style="margin-bottom:8px;">
+              <div class="card-title">
+                <span>Message Integrity Verification (Padding Stripped)</span>
+                <span id="proofBadge" class="badge badge-green">✓ Original Text 100% Preserved</span>
+              </div>
+            </div>
+            <p style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">
+              The server received the transformed, padded packets over the loopback socket, stripped the synthetic padding bytes, and proved zero payload loss:
+            </p>
+            <div id="proofReassembledText" class="proof-box" style="font-family:var(--font-mono); font-size:13px; color:var(--text); white-space:pre-wrap;"></div>
+          </div>
+
+          <!-- Action Links -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
+            <a id="btnProceedClassifierAfter" href="#" class="btn btn-secondary">
+              Inspect Transformed DPI Classification →
+            </a>
+            <a id="btnProceedComparison" href="#" class="btn btn-primary btn-lg">
+              Proceed to Full Comparison (Stage 05) →
+            </a>
+          </div>
+        </div>
+
+      </div>
+
+      <footer id="appFooter" class="app-footer"></footer>
+    </main>
+  </div>
+
+  <script src="js/vendor/chart.umd.min.js"></script>
+  <script type="module" src="js/mimicry.js"></script>
+</body>
+</html>

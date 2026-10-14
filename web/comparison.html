@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comparison & Evaluation - Protocol Mimicry Engine</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <style>
+    .side-card {
+      padding: 20px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <aside id="appSidebar" class="sidebar"></aside>
+
+    <main class="main-content">
+      <header id="appTopbar" class="topbar"></header>
+      <div id="appStepper" class="pipeline-strip"></div>
+
+      <div class="content-body fade-in" id="comparisonContent">
+        <!-- Top Info Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:20px; font-weight:800;">Comparative Evaluation & Deception Analysis</h2>
+            <p style="color:var(--text-muted); font-size:13px;">
+              Experiment ID: <strong id="expIdBadge" class="mono" style="color:var(--primary);">-</strong>
+            </p>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <a id="btnExportReport" target="_blank" href="#" class="btn btn-primary btn-sm">
+              <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+              Printable HTML Report
+            </a>
+            <a id="btnExportCSV" href="#" class="btn btn-secondary btn-sm">
+              Export Deltas CSV
+            </a>
+          </div>
+        </div>
+
+        <!-- Big Verdict Banner -->
+        <div id="verdictBanner" class="verdict-banner warning">
+          Evaluating comparative verdict...
+        </div>
+
+        <!-- Side-by-Side Classification Cards -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px;">
+          <!-- Before Card -->
+          <div class="side-card" style="border-top:4px solid #64748B;">
+            <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--text-muted);">
+              Baseline Transmission (Before)
+            </div>
+            <h3 id="beforeCategory" style="font-size:18px; font-weight:800; margin:6px 0; color:var(--text);">-</h3>
+            <div id="beforeConfidence" style="font-size:13px; color:var(--text-muted);">-</div>
+          </div>
+
+          <!-- After Card -->
+          <div class="side-card" style="border-top:4px solid var(--primary); background:#F8FAFC;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--primary);">
+                Mimicked Transmission (After)
+              </span>
+              <span class="badge badge-blue">Target: <span id="targetProfileName">-</span></span>
+            </div>
+            <h3 id="afterCategory" style="font-size:18px; font-weight:800; margin:6px 0; color:var(--primary);">-</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--text-muted);">
+              <span id="afterConfidence">-</span>
+              <span>Similarity to Target: <strong id="similarityScore" style="color:var(--primary);">0%</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Overlay Bar Chart -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h4 class="card-title">Before vs After Dimension Overlay</h4>
+              <p class="card-subtitle">Direct visual comparison of statistical feature shifts</p>
+            </div>
+          </div>
+          <div style="height:260px;">
+            <canvas id="overlayChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Feature Delta Table -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Feature-by-Feature Variance & Deltas</h3>
+              <p class="card-subtitle">Exact physical measurements and percentage shifts across sockets</p>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:30%;">Metric</th>
+                  <th style="width:17%; text-align:right;">Baseline (Original)</th>
+                  <th style="width:17%; text-align:right;">Mimicked (Transformed)</th>
+                  <th style="width:18%; text-align:right;">Delta (Δ)</th>
+                  <th style="width:18%; text-align:right;">Percent Shift</th>
+                </tr>
+              </thead>
+              <tbody id="deltasTableBody">
+                <tr><td colspan="5" style="text-align:center; padding:20px;">Loading deltas...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Network Cost & Overhead Breakdown -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Real Network Overhead Cost</h3>
+              <p class="card-subtitle">Trade-offs measured over localhost transmission</p>
+            </div>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <span class="metric-label">Extra Bandwidth Volume</span>
+              <div id="ovhExtraBytes" class="metric-value" style="color:var(--warning);">+0%</div>
+              <span class="metric-sub">Payload padding overhead</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Added Latency Delay</span>
+              <div id="ovhAddedDelay" class="metric-value" style="color:var(--primary);">+0%</div>
+              <span class="metric-sub">Pacing delays introduced</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Throughput Change</span>
+              <div id="ovhThroughput" class="metric-value" style="color:var(--accent);">0%</div>
+              <span class="metric-sub">Effective rate impact</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Links -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
+          <a href="mimicry.html" class="btn btn-secondary">← Back to Mimicry Lab</a>
+          <a href="results.html" class="btn btn-primary btn-lg">View All Results & History →</a>
+        </div>
+      </div>
+
+      <footer id="appFooter" class="app-footer"></footer>
+    </main>
+  </div>
+
+  <script src="js/vendor/chart.umd.min.js"></script>
+  <script type="module" src="js/comparison.js"></script>
+</body>
+</html>

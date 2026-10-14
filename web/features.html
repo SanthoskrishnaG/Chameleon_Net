@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feature Analysis - Protocol Mimicry Engine</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <style>
+    .chart-box {
+      height: 240px;
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <aside id="appSidebar" class="sidebar"></aside>
+
+    <main class="main-content">
+      <header id="appTopbar" class="topbar"></header>
+      <div id="appStepper" class="pipeline-strip"></div>
+
+      <div class="content-body fade-in" id="featuresContainer">
+        <!-- Header Info Bar -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:20px; font-weight:800;">Extracted Observable Network Features</h2>
+            <p style="color:var(--text-muted); font-size:13px;">
+              Experiment Trace: <strong id="currentExpBadge" class="mono" style="color:var(--primary);">-</strong>
+            </p>
+          </div>
+          <div>
+            <a id="btnProceedClassifier" href="classifier.html" class="btn btn-primary btn-lg">
+              Proceed to DPI Classifier (Stage 03) →
+            </a>
+          </div>
+        </div>
+
+        <!-- 3 Charts Grid -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:20px; margin-bottom:24px;">
+          <div class="card">
+            <div class="card-header">
+              <h4 class="card-title">Packet Size Histogram</h4>
+            </div>
+            <div class="chart-box">
+              <canvas id="sizeHistogramCanvas"></canvas>
+            </div>
+            <p style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+              <strong>DPI Relevance:</strong> Web browsing shows bimodal sizes (small requests + MTU responses); VoIP exhibits narrow, fixed 160B clusters.
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h4 class="card-title">Inter-Packet Arrival Time (IPT)</h4>
+            </div>
+            <div class="chart-box">
+              <canvas id="iptTimelineCanvas"></canvas>
+            </div>
+            <p style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+              <strong>DPI Relevance:</strong> VoIP maintains strict 20ms cadence with low jitter; web browsing features idle think times (>100ms).
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h4 class="card-title">Burstiness Cluster Ratio</h4>
+            </div>
+            <div class="chart-box">
+              <canvas id="burstDonutCanvas"></canvas>
+            </div>
+            <p style="font-size:11px; color:var(--text-muted); margin-top:8px;">
+              <strong>DPI Relevance:</strong> High burst density indicates media buffering or bulk file transfer chunks over TCP windows.
+            </p>
+          </div>
+        </div>
+
+        <!-- Full Metric Table -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Deep Statistical Metrics Table</h3>
+              <p class="card-subtitle">Observable features ingested directly by the heuristic classification rules</p>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:28%;">Observable Metric</th>
+                  <th style="width:25%;">Measured Value</th>
+                  <th>Network Behavioral Description</th>
+                </tr>
+              </thead>
+              <tbody id="featuresTableBody">
+                <tr><td colspan="3" style="text-align:center; padding:20px;">Loading extracted features...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Educational Deep Dive -->
+        <div class="card" style="background:#F8FAFC; border:1px solid var(--border);">
+          <h4 style="font-size:15px; margin-bottom:10px; color:var(--text);">How Heuristic DPI Operates on These Features:</h4>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; font-size:13px; color:var(--text-muted);">
+            <div>
+              <strong style="color:var(--text);">1. Size Distribution:</strong>
+              <p>Applications naturally exhibit characteristic MTU patterns. Audio codecs (G.711) transmit fixed 160-byte datagrams, while DNS queries rarely exceed 200 bytes.</p>
+            </div>
+            <div>
+              <strong style="color:var(--text);">2. Inter-Packet Timing (IPT):</strong>
+              <p>Real-time protocols require strict isochronous timing (e.g., 20ms voice packets). In contrast, automated file downloads saturate link intervals.</p>
+            </div>
+            <div>
+              <strong style="color:var(--text);">3. Jitter & Bursts:</strong>
+              <p>Jitter is the variance in delay. Video streaming pushes bursts of packets to fill client buffers, producing high burst counts followed by idle gaps.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <footer id="appFooter" class="app-footer"></footer>
+    </main>
+  </div>
+
+  <script src="js/vendor/chart.umd.min.js"></script>
+  <script type="module" src="js/features.js"></script>
+</body>
+</html>

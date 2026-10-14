@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Results History - Protocol Mimicry Engine</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside id="appSidebar" class="sidebar"></aside>
+
+    <main class="main-content">
+      <header id="appTopbar" class="topbar"></header>
+
+      <div class="content-body fade-in">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:20px; font-weight:800;">Laboratory Experiments Archive</h2>
+            <p style="color:var(--text-muted); font-size:13px;">
+              Persisted experiment records and loopback socket traffic traces
+            </p>
+          </div>
+          <a href="generator.html" class="btn btn-primary">
+            + New Transmission Run
+          </a>
+        </div>
+
+        <!-- Filter & Search Controls -->
+        <div class="card" style="padding:16px; margin-bottom:18px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="flex:1; min-width:240px;">
+              <input type="text" id="searchInput" class="form-input" placeholder="Search by Experiment ID, category, or profile...">
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:12px; color:var(--text-muted); font-weight:600;">Sort By:</span>
+              <select id="sortSelect" class="form-select" style="width:180px;">
+                <option value="created_at" selected>Date (Newest First)</option>
+                <option value="confidence">Mimicry Confidence</option>
+                <option value="id">Experiment ID</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Experiments Table -->
+        <div class="card">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Experiment ID</th>
+                  <th>Timestamp</th>
+                  <th>Transport</th>
+                  <th>Baseline Classification</th>
+                  <th>Target Profile</th>
+                  <th>Mimicked Classification</th>
+                  <th>Verdict</th>
+                  <th style="min-width:180px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="resultsTableBody">
+                <tr><td colspan="8" style="text-align:center; padding:24px;">Loading experiments...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <footer id="appFooter" class="app-footer"></footer>
+    </main>
+  </div>
+
+  <script src="js/vendor/chart.umd.min.js"></script>
+  <script type="module" src="js/results.js"></script>
+</body>
+</html>

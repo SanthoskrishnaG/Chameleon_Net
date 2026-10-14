@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Traffic Generator - Protocol Mimicry Engine</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <style>
+    .hidden { display: none !important; }
+    .mode-select-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .mode-card {
+      border: 2px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      transition: all 0.2s ease;
+      background: var(--surface);
+    }
+    .mode-card:hover {
+      border-color: var(--primary-border);
+      background: var(--surface-hover);
+    }
+    .mode-card input {
+      margin-top: 4px;
+    }
+    .mode-card.selected {
+      border-color: var(--primary);
+      background: var(--primary-soft);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <aside id="appSidebar" class="sidebar"></aside>
+
+    <main class="main-content">
+      <header id="appTopbar" class="topbar"></header>
+      <div id="appStepper" class="pipeline-strip"></div>
+
+      <div class="content-body fade-in">
+        <!-- Educational Banner -->
+        <div class="card" style="border-left:4px solid var(--accent); background:#F0FDFA; margin-bottom:20px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:24px;">💡</span>
+            <div>
+              <strong style="color:var(--accent);">Crucial Network Inspection Principle:</strong>
+              <p style="margin:2px 0 0 0; font-size:13px; color:#134E4A;">
+                The DPI classifier analyzes statistical packet size, arrival timing, count, and burstiness. <strong>It completely ignores the actual words or payloads.</strong>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Packet Flow Animation Canvas -->
+        <div class="packet-flow-container">
+          <div class="packet-flow-header">
+            <span class="flow-node client">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              Client (127.0.0.1)
+            </span>
+            <span style="font-size:12px; font-weight:600; color:var(--text-muted);">
+              Active Localhost Socket Stream (Microsecond Precision)
+            </span>
+            <span class="flow-node server">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+              Server (127.0.0.1)
+            </span>
+          </div>
+          <canvas id="flowCanvas" height="80"></canvas>
+        </div>
+
+        <!-- Traffic Generation Form -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Configure Socket Transmission</h3>
+              <p class="card-subtitle">Select traffic generation mode and socket transmission parameters</p>
+            </div>
+          </div>
+
+          <form id="trafficForm">
+            <!-- Mode Selector -->
+            <label class="form-label">Transmission Mode</label>
+            <div class="mode-select-grid">
+              <label class="mode-card">
+                <input type="radio" name="payload_mode" value="pattern" checked>
+                <div>
+                  <strong>Synthetic Random / Pattern</strong>
+                  <div style="font-size:12px; color:var(--text-muted);">Configurable packet counts with pseudo-random or structured byte fills.</div>
+                </div>
+              </label>
+              <label class="mode-card">
+                <input type="radio" name="payload_mode" value="custom_text">
+                <div>
+                  <strong>Custom User Text (UTF-8 Chunking)</strong>
+                  <div style="font-size:12px; color:var(--text-muted);">Type custom messages; fragments into framed packets and verifies lossless reassembly.</div>
+                </div>
+              </label>
+            </div>
+
+            <!-- Custom Text Section (Hidden by default) -->
+            <div id="customTextSection" class="hidden" style="background:var(--surface-alt); padding:18px; border-radius:var(--radius-sm); border:1px solid var(--border); margin-bottom:20px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <label class="form-label" style="margin:0;">Custom Payload Text (Max 5,000 chars)</label>
+                <div style="display:flex; gap:8px;">
+                  <button type="button" id="btnSampleShort" class="btn btn-secondary btn-sm">Sample Incident Report</button>
+                  <button type="button" id="btnSampleLong" class="btn btn-secondary btn-sm">Sample Technical Log</button>
+                </div>
+              </div>
+              <textarea id="customTextInput" class="form-textarea" placeholder="Type custom message to transmit over sockets..."></textarea>
+              <div id="textMetricsCounter" style="font-size:12px; color:var(--primary); font-weight:600; margin-top:6px;">
+                0 characters, 0 UTF-8 bytes, 0 packets
+              </div>
+
+              <!-- Colored Chunk Preview -->
+              <div style="margin-top:14px;">
+                <strong style="font-size:12px; color:var(--text);">Live Packet Chunk Preview:</strong>
+                <div id="chunkPreviewGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px; margin-top:8px;"></div>
+              </div>
+            </div>
+
+            <!-- Parameters Grid -->
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Transport Protocol</label>
+                <select id="protocolSelect" class="form-select">
+                  <option value="TCP" selected>TCP (Stream Socket, Loopback)</option>
+                  <option value="UDP">UDP (Datagram Socket, Loopback)</option>
+                </select>
+                <span class="form-helper">TCP provides stream ordering; UDP measures loss/jitter.</span>
+              </div>
+
+              <div id="packetCountGroup" class="form-group">
+                <label class="form-label">Packet Count (10 - 1000)</label>
+                <input type="number" id="packetCountInput" class="form-input" min="10" max="1000" value="60">
+                <span class="form-helper">Total packets transmitted during run.</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Packet Size (16 - 1460 Bytes)</label>
+                <input type="number" id="packetSizeInput" class="form-input" min="16" max="1460" value="512">
+                <span class="form-helper">Payload size per datagram.</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Inter-Packet Interval (1 - 1000 ms)</label>
+                <input type="number" id="intervalInput" class="form-input" min="1" max="1000" value="15">
+                <span class="form-helper">Pacing delay between sequential sends.</span>
+              </div>
+
+              <div id="patternSection" class="form-group">
+                <label class="form-label">Payload Pattern</label>
+                <select id="patternSelect" class="form-select">
+                  <option value="random" selected>High-Entropy Random Bytes</option>
+                  <option value="zeros">Null Bytes (Zeros)</option>
+                  <option value="incrementing">Incrementing Modulo Sequence</option>
+                  <option value="text-like">ASCII Text-like Bytes</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Flow Direction</label>
+                <select id="directionSelect" class="form-select">
+                  <option value="client->server" selected>Unidirectional (Client -> Server)</option>
+                  <option value="bidirectional">Bidirectional (Echo ACK Server -> Client)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
+              <button type="submit" id="btnGenerate" class="btn btn-primary btn-lg">
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                Transmit Packets Over Sockets
+              </button>
+              <span style="font-size:12px; color:var(--text-muted);">Binds automatically to 127.0.0.1 free ports.</span>
+            </div>
+          </form>
+
+          <!-- Live Progress Bar -->
+          <div style="margin-top:24px;">
+            <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:var(--text);">
+              <span>Transmission Progress</span>
+              <span id="progressText">Idle (0%)</span>
+            </div>
+            <div class="progress-container">
+              <div id="progressBar" class="progress-bar"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Received Message Proof Box (For custom text) -->
+        <div id="receivedBox" class="card hidden" style="border-left:4px solid var(--success);">
+          <div class="card-header" style="margin-bottom:10px;">
+            <div class="card-title">
+              <span>Server-Side Reassembly Proof</span>
+              <span id="reassemblyMatchBadge" class="badge badge-green">✓ Message Received Correctly</span>
+            </div>
+          </div>
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">
+            The server collected socket packets in microsecond sequence, decoded headers, and stripped padding to reconstruct the original message:
+          </p>
+          <div id="receivedTextContent" class="proof-box" style="font-family:var(--font-mono); font-size:13px; color:var(--text); white-space:pre-wrap;"></div>
+          <div id="udpAnomalyReport" class="hidden" style="margin-top:10px; font-size:12px; color:var(--warning); background:var(--warning-soft); padding:8px 12px; border-radius:6px;"></div>
+        </div>
+
+        <!-- Live Packet Trace Table -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Live Loopback Packet Trace</h3>
+              <p class="card-subtitle">Real-time socket arrival logs with CRC32 integrity verification</p>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Seq #</th>
+                  <th>Timestamp</th>
+                  <th>Proto</th>
+                  <th>Dir</th>
+                  <th>Size</th>
+                  <th>CRC32</th>
+                  <th>Preview (20B)</th>
+                </tr>
+              </thead>
+              <tbody id="liveTraceBody">
+                <tr><td colspan="7" style="text-align:center; padding:24px; color:var(--text-muted);">No active transmission. Click "Transmit Packets Over Sockets" to start.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Post Generation Next Steps -->
+        <div id="postGenActions" class="card hidden" style="background:#F0FDF4; border:1px solid var(--success-border); text-align:center; padding:20px;">
+          <h4 style="color:var(--success); margin-bottom:6px;">Transmission Complete! Trace saved to disk.</h4>
+          <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+            Now inspect the statistical features or jump directly into the DPI Classifier.
+          </p>
+          <div style="display:flex; justify-content:center; gap:12px;">
+            <a id="linkAnalyzeFeatures" href="#" class="btn btn-primary">
+              Stage 02: Feature Analysis →
+            </a>
+            <a id="linkApplyMimicry" href="#" class="btn btn-secondary">
+              Stage 04: Mimicry Lab →
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <footer id="appFooter" class="app-footer"></footer>
+    </main>
+  </div>
+
+  <script src="js/vendor/chart.umd.min.js"></script>
+  <script type="module" src="js/generator.js"></script>
+</body>
+</html>

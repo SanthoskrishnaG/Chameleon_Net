@@ -1,0 +1,156 @@
+/* ==========================================================================
+   Protocol Mimicry Engine - Micro-Animations & Dynamic Feedback
+   Respects prefers-reduced-motion
+   ========================================================================== */
+
+@keyframes fadeInSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseDot {
+  0% {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(22, 163, 74, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+  }
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes rowSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes flowMovingDot {
+  0% {
+    left: 0%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.fade-in {
+  animation: fadeInSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.stagger-1 { animation: fadeInSlideUp 0.3s ease 0.05s forwards; opacity: 0; }
+.stagger-2 { animation: fadeInSlideUp 0.3s ease 0.10s forwards; opacity: 0; }
+.stagger-3 { animation: fadeInSlideUp 0.3s ease 0.15s forwards; opacity: 0; }
+.stagger-4 { animation: fadeInSlideUp 0.3s ease 0.20s forwards; opacity: 0; }
+
+.trace-row-new {
+  animation: rowSlideIn 0.25s ease forwards;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* Semi-circle Gauge Animation Container */
+.gauge-wrapper {
+  position: relative;
+  width: 220px;
+  height: 110px;
+  margin: 0 auto 16px auto;
+  overflow: hidden;
+}
+
+.gauge-canvas {
+  width: 220px;
+  height: 110px;
+}
+
+.gauge-center-val {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+
+.gauge-center-label {
+  position: absolute;
+  bottom: 24px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Live moving dot along connector line */
+.pipeline-connector-line {
+  position: relative;
+  height: 2px;
+  background: var(--border);
+  flex: 1;
+  margin: 0 8px;
+  overflow: hidden;
+}
+
+.pipeline-connector-line.active::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: flowMovingDot 1.2s linear infinite;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

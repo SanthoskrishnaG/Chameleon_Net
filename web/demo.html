@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Demo Walkthrough - Protocol Mimicry Engine</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <style>
+    .hidden { display: none !important; }
+    .demo-step-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <aside id="appSidebar" class="sidebar"></aside>
+
+    <main class="main-content">
+      <header id="appTopbar" class="topbar"></header>
+
+      <div class="content-body fade-in">
+        <!-- Top Title Bar -->
+        <div style="margin-bottom:20px;">
+          <h2 style="font-size:22px; font-weight:800; color:var(--text);">Automated Live Demonstration</h2>
+          <p style="color:var(--text-muted); font-size:13px;">
+            End-to-end narrated walkthrough executing real socket transmissions and statistical heuristic DPI classification
+          </p>
+        </div>
+
+        <!-- 1. Demo Configuration Card -->
+        <div id="demoConfigCard" class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Configure Live Walkthrough Parameters</h3>
+              <p class="card-subtitle">Choose payload source and target mimicry profile</p>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
+            <div>
+              <label class="form-label">Traffic Source</label>
+              <div style="display:flex; gap:16px; margin-top:6px;">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="radio" name="demoSource" value="random" checked>
+                  <strong>Random Pattern (Bulk Baseline)</strong>
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="radio" name="demoSource" value="custom_text">
+                  <strong>Custom User Text</strong>
+                </label>
+              </div>
+
+              <div id="demoCustomTextGroup" class="form-group hidden" style="margin-top:14px;">
+                <label class="form-label">Your Custom Text</label>
+                <textarea id="demoCustomTextInput" class="form-textarea" rows="2">Antigravity Security Lab: Real loopback socket verification.</textarea>
+              </div>
+            </div>
+
+            <div>
+              <div class="form-group">
+                <label class="form-label">Demonstration Scenario</label>
+                <select id="demoScenario" class="form-select">
+                  <option value="deception" selected>1. Successful Deception (Bulk Transfer → VoIP-like Audio Stream)</option>
+                  <option value="limitation">2. Honest Protocol Limitation (TCP Source → UDP VoIP mismatch)</option>
+                </select>
+                <span class="form-helper">
+                  Scenario 1 demonstrates full statistical mimicry; Scenario 2 demonstrates honest L4 transport limits.
+                </span>
+              </div>
+
+              <div class="form-group" style="margin-top:12px;">
+                <label class="form-label">Target Mimicry Profile</label>
+                <select id="demoTargetProfile" class="form-select">
+                  <option value="voip_call" selected>VoIP-like Audio Stream (Primary Deception Target)</option>
+                  <option value="video_stream">Video-Streaming-like (Large MTU Bursts)</option>
+                  <option value="dns_lookup">DNS-like Query Flow (UDP Small Packets)</option>
+                  <option value="web_browsing">HTTP-like Web Browsing (Bursty TCP)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align:right;">
+            <button id="btnStartDemo" class="btn btn-primary btn-lg">
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Start Automated Live Walkthrough
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Active Walkthrough Panel -->
+        <div id="demoActiveCard" class="card hidden">
+          <!-- Narration Banner -->
+          <div style="background:#EAF1FF; border:1px solid var(--primary-border); padding:16px 20px; border-radius:var(--radius-sm); margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <strong style="color:var(--primary); font-size:12px; text-transform:uppercase; letter-spacing:0.04em;">Live Narration:</strong>
+              <div id="demoNarrationText" style="font-size:15px; font-weight:700; color:var(--text); margin-top:2px;">
+                Initializing automated laboratory sequence...
+              </div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button id="btnPauseDemo" class="btn btn-secondary btn-sm">Pause</button>
+              <button id="btnSpeedDemo" class="btn btn-secondary btn-sm">Speed: 1x</button>
+              <button id="btnRestartDemo" class="btn btn-secondary btn-sm">Restart</button>
+            </div>
+          </div>
+
+          <!-- Packet Flow Canvas -->
+          <div class="packet-flow-container" style="margin-bottom:24px;">
+            <div class="packet-flow-header">
+              <span class="flow-node client">Client (127.0.0.1)</span>
+              <span style="font-size:12px; font-weight:600; color:var(--text-muted);">Real-Time Loopback Packet Animation</span>
+              <span class="flow-node server">Server (127.0.0.1)</span>
+            </div>
+            <canvas id="demoFlowCanvas" height="75"></canvas>
+          </div>
+
+          <!-- 2-Column Split: Step Checklist vs Live Visuals -->
+          <div style="display:grid; grid-template-columns:260px 1fr; gap:24px;">
+            <!-- Step Checklist -->
+            <div>
+              <h4 style="font-size:13px; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:12px;">Pipeline Stages</h4>
+              <div class="demo-step-list">
+                <div id="demoStepItem_1" class="step-item">
+                  <span id="demoStepCheck_1" class="step-num">1</span>
+                  <span>1. Generate Baseline</span>
+                </div>
+                <div id="demoStepItem_2" class="step-item">
+                  <span id="demoStepCheck_2" class="step-num">2</span>
+                  <span>2. Extract Features</span>
+                </div>
+                <div id="demoStepItem_3" class="step-item">
+                  <span id="demoStepCheck_3" class="step-num">3</span>
+                  <span>3. Classify Baseline</span>
+                </div>
+                <div id="demoStepItem_4" class="step-item">
+                  <span id="demoStepCheck_4" class="step-num">4</span>
+                  <span>4. Apply Mimicry</span>
+                </div>
+                <div id="demoStepItem_5" class="step-item">
+                  <span id="demoStepCheck_5" class="step-num">5</span>
+                  <span>5. Classify Transformed</span>
+                </div>
+                <div id="demoStepItem_6" class="step-item">
+                  <span id="demoStepCheck_6" class="step-num">6</span>
+                  <span>6. Comparison Verdict</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dynamic Live Visuals -->
+            <div>
+              <!-- Step 2: Extracted Features -->
+              <div id="demoFeaturesCard" class="card hidden" style="padding:16px; margin-bottom:16px; background:var(--surface-alt);">
+                <strong style="font-size:13px;">Extracted Observable Metrics:</strong>
+                <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:8px;">
+                  <div><span style="font-size:11px; color:var(--text-muted);">Mean Size:</span><div id="demoFeatMeanSize" class="mono" style="font-weight:700;">-</div></div>
+                  <div><span style="font-size:11px; color:var(--text-muted);">Mean IPT:</span><div id="demoFeatMeanIPT" class="mono" style="font-weight:700;">-</div></div>
+                  <div><span style="font-size:11px; color:var(--text-muted);">Jitter:</span><div id="demoFeatJitter" class="mono" style="font-weight:700;">-</div></div>
+                  <div><span style="font-size:11px; color:var(--text-muted);">Bursts:</span><div id="demoFeatBursts" class="mono" style="font-weight:700;">-</div></div>
+                </div>
+              </div>
+
+              <!-- Step 3: Baseline Classifier Gauge -->
+              <div id="demoClassifierCard" class="card hidden" style="padding:16px; margin-bottom:16px; text-align:center;">
+                <span class="metric-label">Original Baseline Category</span>
+                <h4 id="demoBeforeCat" style="font-size:18px; font-weight:800; margin:4px 0;">-</h4>
+                <div id="demoBeforeConf" style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">-</div>
+                <div class="gauge-wrapper" style="height:90px;">
+                  <canvas id="demoGaugeCanvasBefore" width="220" height="90"></canvas>
+                </div>
+              </div>
+
+              <!-- Step 4: Mimicry Applied -->
+              <div id="demoMimicCard" class="card hidden" style="padding:16px; margin-bottom:16px; background:#F0FDF4; border:1px solid var(--success-border);">
+                <div style="font-weight:700; color:var(--success); margin-bottom:6px;">✓ Three Mimicry Dimensions Switched ON:</div>
+                <div style="font-size:12px; color:var(--text);">
+                  Padding: Active | Timing Reshaped: Active | Burst Injected: Active
+                </div>
+                <div style="display:flex; gap:20px; font-size:12px; margin-top:8px;">
+                  <span>Extra Bytes: <strong id="demoOvhBytes">+0%</strong></span>
+                  <span>Added Delay: <strong id="demoOvhDelay">+0%</strong></span>
+                </div>
+              </div>
+
+              <!-- Step 5: Transformed Classifier Gauge -->
+              <div id="demoClassifierAfterCard" class="card hidden" style="padding:16px; margin-bottom:16px; text-align:center; background:#F8FAFC; border:2px solid var(--primary);">
+                <span class="metric-label" style="color:var(--primary);">Transformed Mimicked Category</span>
+                <h4 id="demoAfterCat" style="font-size:20px; font-weight:800; color:var(--primary); margin:4px 0;">-</h4>
+                <div id="demoAfterConf" style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">-</div>
+                <div class="gauge-wrapper" style="height:90px;">
+                  <canvas id="demoGaugeCanvasAfter" width="220" height="90"></canvas>
+                </div>
+              </div>
+
+              <!-- Step 6: Final Verdict Banner -->
+              <div id="demoVerdictBanner" class="verdict-banner success hidden"></div>
+
+              <!-- Save as Experiment Button -->
+              <div style="text-align:right; margin-top:16px;">
+                <button id="btnSaveExp" class="btn btn-primary btn-lg hidden">
+                  Save as Experiment & View Results Archive →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <footer id="appFooter" class="app-footer"></footer>
+    </main>
+  </div>
+
+  <script src="js/vendor/chart.umd.min.js"></script>
+  <script type="module" src="js/demo.js"></script>
+</body>
+</html>
