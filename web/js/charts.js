@@ -142,25 +142,89 @@ export function renderIPTLineChart(canvasId, iptSample) {
 
 /**
  * Burst Donut Chart (Chart.js)
+ * Accurately displays the proportion of transmissions in burst clusters vs isolated transmissions.
  */
-export function renderBurstDonut(canvasId, burstCount, singlePackets) {
+export function renderBurstDonut(canvasId, burstTransmissions = 0, isolatedTransmissions = 0, totalTransmissions = null, burstClusterCount = null) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !window.Chart) return null;
+
+  const burstTx = Math.max(0, parseInt(burstTransmissions, 10) || 0);
+  const isolatedTx = Math.max(0, parseInt(isolatedTransmissions, 10) || 0);
+  const total = totalTransmissions !== null && totalTransmissions !== undefined
+    ? parseInt(totalTransmissions, 10)
+    : (burstTx + isolatedTx);
+
+  const parent = canvas.parentElement;
+
+  // Handle empty or insufficient data gracefully
+  if (total <= 0 || (burstTx === 0 && isolatedTx === 0)) {
+    canvas.style.display = "none";
+    if (parent) {
+      let emptyMsg = parent.querySelector(".chart-empty-msg");
+      if (!emptyMsg) {
+        emptyMsg = document.createElement("div");
+        emptyMsg.className = "chart-empty-msg";
+        emptyMsg.style.cssText = "display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-muted); font-size:13px; text-align:center; padding:20px;";
+        parent.appendChild(emptyMsg);
+      }
+      emptyMsg.innerText = "No traffic measurements available";
+    }
+    return null;
+  }
+
+  // Restore canvas if previously hidden
+  canvas.style.display = "block";
+  if (parent) {
+    const emptyMsg = parent.querySelector(".chart-empty-msg");
+    if (emptyMsg) emptyMsg.remove();
+  }
+
+  const burstPctStr = total > 0 ? ((burstTx / total) * 100).toFixed(1) : "0.0";
+  const isolatedPctStr = total > 0 ? ((isolatedTx / total) * 100).toFixed(1) : "0.0";
 
   return new window.Chart(canvas, {
     type: "doughnut",
     data: {
-      labels: ["Burst Clusters (<20ms)", "Isolated Transmissions"],
+      labels: [
+        `Burst Clusters (${burstPctStr}%)`,
+        `Isolated (${isolatedPctStr}%)`
+      ],
       datasets: [{
-        data: [burstCount, Math.max(1, singlePackets)],
-        backgroundColor: ["#2563EB", "#CBD5E1"]
+        data: [burstTx, isolatedTx],
+        backgroundColor: ["#2563EB", "#CBD5E1"],
+        hoverBackgroundColor: ["#1D4ED8", "#94A3B8"],
+        borderWidth: 2,
+        borderColor: "#FFFFFF"
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { position: "bottom" }
+        legend: {
+          position: "bottom",
+          labels: {
+            boxWidth: 12,
+            padding: 14,
+            font: { size: 11, family: "'Inter', sans-serif", weight: "500" }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const val = context.raw || 0;
+              const pct = total > 0 ? ((val / total) * 100).toFixed(1) : "0.0";
+              const labelName = context.dataIndex === 0 ? "Burst-Cluster Transmissions" : "Isolated Transmissions";
+              return ` ${labelName}: ${val} pkts (${pct}%)`;
+            },
+            afterBody: function() {
+              if (burstClusterCount !== null && burstClusterCount !== undefined) {
+                return `Total Clusters: ${burstClusterCount}`;
+              }
+              return "";
+            }
+          }
+        }
       },
       cutout: "70%"
     }

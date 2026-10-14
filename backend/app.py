@@ -831,14 +831,22 @@ def api_traffic_status(exp_id):
 def api_features(exp_id):
     """Retrieve extracted features for baseline and mimicked traffic."""
     validate_id_format(exp_id, "Experiment ID")
-    before = load_saved_features(exp_id)
-    if not before:
+    force_refresh = request.args.get("refresh", "false").lower() == "true"
+
+    before = None if force_refresh else load_saved_features(exp_id)
+    if not before or "burst_cluster_ratio" not in before:
         try:
             before = extract_and_save_features(exp_id)
         except Exception as e:
             return jsonify({"error": f"Failed to extract features: {e}"}), 404
 
-    after = load_saved_features(exp_id, suffix="_mimic")
+    after = None if force_refresh else load_saved_features(exp_id, suffix="_mimic")
+    if force_refresh or (after and "burst_cluster_ratio" not in after):
+        try:
+            after = extract_and_save_features(exp_id, suffix="_mimic")
+        except Exception:
+            pass
+
     return jsonify({
         "experiment_id": exp_id,
         "features_before": before,

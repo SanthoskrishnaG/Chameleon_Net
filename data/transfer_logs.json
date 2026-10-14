@@ -1,5 +1,539 @@
 [
   {
+    "event_id": "LOG-20261015-032910-f03e",
+    "timestamp": "2026-10-15T03:29:10.187739",
+    "event_type": "file_delete",
+    "status": "success",
+    "message": "File FILE-RESTART-1792015150087 (persistent_test.json) was deleted from laboratory storage.",
+    "file_id": "FILE-RESTART-1792015150087",
+    "experiment_id": null,
+    "details": {},
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032910-4eb1",
+    "timestamp": "2026-10-15T03:29:10.120192",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'persistent_test.json' (1024 B) logged with status completed.",
+    "file_id": "FILE-RESTART-1792015150087",
+    "experiment_id": null,
+    "details": {
+      "protocol": "TCP",
+      "sha256": null,
+      "integrity_verified": false
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032910-7e70",
+    "timestamp": "2026-10-15T03:29:10.060092",
+    "event_type": "file_delete",
+    "status": "success",
+    "message": "File FILE-20261015-032909-dcec (udp_stream.bin) was deleted from laboratory storage.",
+    "file_id": "FILE-20261015-032909-dcec",
+    "experiment_id": "EXP-20261015-032909-5061",
+    "details": {},
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032909-a987",
+    "timestamp": "2026-10-15T03:29:09.934970",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'udp_stream.bin' (48 B) logged with status completed.",
+    "file_id": "FILE-20261015-032909-dcec",
+    "experiment_id": "EXP-20261015-032909-5061",
+    "details": {
+      "protocol": "UDP",
+      "sha256": "e2480a1d721d387453746ac2ec6cd40c30bc69d5d2cf48da19d48fe7f74c8869",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032909-890b",
+    "timestamp": "2026-10-15T03:29:09.758963",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'transfer.bin' (48 B) logged with status completed.",
+    "file_id": "FILE-20261015-032909-d27b",
+    "experiment_id": "EXP-20261015-032909-5061",
+    "details": {
+      "protocol": "UDP",
+      "sha256": "e2480a1d721d387453746ac2ec6cd40c30bc69d5d2cf48da19d48fe7f74c8869",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032909-9489",
+    "timestamp": "2026-10-15T03:29:09.432269",
+    "event_type": "file_delete",
+    "status": "success",
+    "message": "File FILE-20261015-032908-bcb4 (sample_report.txt) was deleted from laboratory storage.",
+    "file_id": "FILE-20261015-032908-bcb4",
+    "experiment_id": "EXP-20261015-032908-9140",
+    "details": {},
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032909-16a6",
+    "timestamp": "2026-10-15T03:29:09.241758",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'sample_report.txt' (92 B) logged with status completed.",
+    "file_id": "FILE-20261015-032908-bcb4",
+    "experiment_id": "EXP-20261015-032908-9140",
+    "details": {
+      "protocol": "TCP",
+      "sha256": "a7f4435c820892b0ad48d298986a2c5aae1ac26bfc384ab01a9d0156137dcd7f",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032909-848c",
+    "timestamp": "2026-10-15T03:29:09.065979",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'transfer.bin' (92 B) logged with status completed.",
+    "file_id": "FILE-20261015-032908-9bc6",
+    "experiment_id": "EXP-20261015-032908-9140",
+    "details": {
+      "protocol": "TCP",
+      "sha256": "a7f4435c820892b0ad48d298986a2c5aae1ac26bfc384ab01a9d0156137dcd7f",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032908-1c5d",
+    "timestamp": "2026-10-15T03:29:08.905046",
+    "event_type": "test_event",
+    "status": "success",
+    "message": "Test event for verification suite.",
+    "file_id": null,
+    "experiment_id": null,
+    "details": {
+      "sample_key": "sample_val"
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032908-4822",
+    "timestamp": "2026-10-15T03:29:08.886419",
+    "event_type": "system_config",
+    "status": "updated",
+    "message": "Laboratory configuration updated.",
+    "file_id": null,
+    "experiment_id": null,
+    "details": {
+      "updated_keys": [
+        "operator"
+      ]
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032908-b821",
+    "timestamp": "2026-10-15T03:29:08.728893",
+    "event_type": "file_delete",
+    "status": "success",
+    "message": "File FILE-TEST-CRUD-1792015148667 (crud_test.txt) was deleted from laboratory storage.",
+    "file_id": "FILE-TEST-CRUD-1792015148667",
+    "experiment_id": null,
+    "details": {},
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032908-a45f",
+    "timestamp": "2026-10-15T03:29:08.686015",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'crud_test.txt' (31 B) logged with status completed.",
+    "file_id": "FILE-TEST-CRUD-1792015148667",
+    "experiment_id": null,
+    "details": {
+      "protocol": "TCP",
+      "sha256": "a814ce6924c76abf09cc2467b9b4bd618863e81cf729b2864a35bf0145a5a195",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032908-abe4",
+    "timestamp": "2026-10-15T03:29:08.526514",
+    "event_type": "transfer_cancel",
+    "status": "cancelled",
+    "message": "Transmission EXP-20261015-032908-1997 cancelled by user.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032908-1997",
+    "details": {},
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032908-206a",
+    "timestamp": "2026-10-15T03:29:08.501046",
+    "event_type": "traffic_generation",
+    "status": "started",
+    "message": "Traffic stream (TCP, 500 packets, mode=pattern) initiated over 127.0.0.1.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032908-1997",
+    "details": {
+      "protocol": "TCP",
+      "payload_mode": "pattern",
+      "filename": null
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032908-99f1",
+    "timestamp": "2026-10-15T03:29:08.410413",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'api_test.csv' (329 B) logged with status completed.",
+    "file_id": "FILE-20261015-032908-0e0c",
+    "experiment_id": "EXP-20261015-032908-9574",
+    "details": {
+      "protocol": "TCP",
+      "sha256": "19911e12737febae34a6278f465a7163814cab65cc0c078817ca4e1a71ccc921",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032908-aa97",
+    "timestamp": "2026-10-15T03:29:08.335217",
+    "event_type": "traffic_generation",
+    "status": "started",
+    "message": "Traffic stream (TCP, 100 packets, mode=file) initiated over 127.0.0.1.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032908-9574",
+    "details": {
+      "protocol": "TCP",
+      "payload_mode": "file",
+      "filename": "api_test.csv"
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032908-181d",
+    "timestamp": "2026-10-15T03:29:08.239097",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'udp_test.txt' (250 B) logged with status completed.",
+    "file_id": "FILE-20261015-032908-083a",
+    "experiment_id": "EXP-20261015-032907-1742",
+    "details": {
+      "protocol": "UDP",
+      "sha256": "d9caa5671e594942da4ba21f67c57079b6ef402c42ae786cd51a1e5cc9397ad2",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032907-67b4",
+    "timestamp": "2026-10-15T03:29:07.799111",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'transfer_test.zip' (200 B) logged with status completed.",
+    "file_id": "FILE-20261015-032907-ba64",
+    "experiment_id": "EXP-20261015-032907-9262",
+    "details": {
+      "protocol": "TCP",
+      "sha256": "4f7910b49f9076e4ac136ba2940fd03fd4e811db786e5eac1aef11afe05b1d44",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032907-8f83",
+    "timestamp": "2026-10-15T03:29:07.524586",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'transfer_test.pdf' (316 B) logged with status completed.",
+    "file_id": "FILE-20261015-032907-6a85",
+    "experiment_id": "EXP-20261015-032907-7560",
+    "details": {
+      "protocol": "TCP",
+      "sha256": "f057a33ffd23f7d985e0c927bc1fed58c91ed27f48c7783dae1e8fbd8f271c66",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032907-d1be",
+    "timestamp": "2026-10-15T03:29:07.277350",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'transfer_test.png' (67 B) logged with status completed.",
+    "file_id": "FILE-20261015-032907-5c6a",
+    "experiment_id": "EXP-20261015-032907-1985",
+    "details": {
+      "protocol": "TCP",
+      "sha256": "f92b68465b92c5670bf6d5e9a418163484c6be00f372913a42015921aaaa3ad7",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032907-b54e",
+    "timestamp": "2026-10-15T03:29:07.040032",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'transfer_test.csv' (329 B) logged with status completed.",
+    "file_id": "FILE-20261015-032906-decc",
+    "experiment_id": "EXP-20261015-032906-7584",
+    "details": {
+      "protocol": "TCP",
+      "sha256": "19911e12737febae34a6278f465a7163814cab65cc0c078817ca4e1a71ccc921",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032906-8ae8",
+    "timestamp": "2026-10-15T03:29:06.781922",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'transfer_test.txt' (250 B) logged with status completed.",
+    "file_id": "FILE-20261015-032906-8a06",
+    "experiment_id": "EXP-20261015-032906-1340",
+    "details": {
+      "protocol": "TCP",
+      "sha256": "d9caa5671e594942da4ba21f67c57079b6ef402c42ae786cd51a1e5cc9397ad2",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032906-de48",
+    "timestamp": "2026-10-15T03:29:06.611814",
+    "event_type": "mimicry",
+    "status": "completed",
+    "message": "Applied mimicry for target 'DNS-like Query Flow'. Verdict: CLASSIFIER FOOLED.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032904-4561",
+    "details": {
+      "target_profile": "dns_lookup",
+      "fooled": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032904-4560",
+    "timestamp": "2026-10-15T03:29:04.995776",
+    "event_type": "traffic_generation",
+    "status": "started",
+    "message": "Traffic stream (UDP, 20 packets, mode=custom_text) initiated over 127.0.0.1.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032904-4561",
+    "details": {
+      "protocol": "UDP",
+      "payload_mode": "custom_text",
+      "filename": null
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032904-3cd1",
+    "timestamp": "2026-10-15T03:29:04.977271",
+    "event_type": "mimicry",
+    "status": "completed",
+    "message": "Applied mimicry for target 'VoIP-like Audio Stream'. Verdict: CLASSIFIER NOT FOOLED.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032903-1533",
+    "details": {
+      "target_profile": "voip_call",
+      "fooled": false
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032903-2a83",
+    "timestamp": "2026-10-15T03:29:03.217510",
+    "event_type": "traffic_generation",
+    "status": "started",
+    "message": "Traffic stream (TCP, 15 packets, mode=pattern) initiated over 127.0.0.1.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032903-1533",
+    "details": {
+      "protocol": "TCP",
+      "payload_mode": "pattern",
+      "filename": null
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032902-41d2",
+    "timestamp": "2026-10-15T03:29:02.930060",
+    "event_type": "traffic_generation",
+    "status": "started",
+    "message": "Traffic stream (TCP, 20 packets, mode=pattern) initiated over 127.0.0.1.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032902-3753",
+    "details": {
+      "protocol": "TCP",
+      "payload_mode": "pattern",
+      "filename": null
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032902-dd81",
+    "timestamp": "2026-10-15T03:29:02.907648",
+    "event_type": "file_delete",
+    "status": "success",
+    "message": "File FILE-20261015-032902-8e60 (route_test_doc.txt) was deleted from laboratory storage.",
+    "file_id": "FILE-20261015-032902-8e60",
+    "experiment_id": "EXP-20261015-032902-2201",
+    "details": {},
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032902-64fe",
+    "timestamp": "2026-10-15T03:29:02.847228",
+    "event_type": "system_config",
+    "status": "updated",
+    "message": "Laboratory configuration updated.",
+    "file_id": null,
+    "experiment_id": null,
+    "details": {
+      "updated_keys": [
+        "limits",
+        "status"
+      ]
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032902-5b66",
+    "timestamp": "2026-10-15T03:29:02.654662",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'route_test_doc.txt' (54 B) logged with status completed.",
+    "file_id": "FILE-20261015-032902-8e60",
+    "experiment_id": "EXP-20261015-032902-2201",
+    "details": {
+      "protocol": "TCP",
+      "sha256": "ad14972a78fa6c37f0ca063682a934002af67648cc72bed9c437b933c2596564",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032902-ac60",
+    "timestamp": "2026-10-15T03:29:02.491425",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'transfer.bin' (54 B) logged with status completed.",
+    "file_id": "FILE-20261015-032902-d2ef",
+    "experiment_id": "EXP-20261015-032902-2201",
+    "details": {
+      "protocol": "TCP",
+      "sha256": "ad14972a78fa6c37f0ca063682a934002af67648cc72bed9c437b933c2596564",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032902-bc17",
+    "timestamp": "2026-10-15T03:29:02.297171",
+    "event_type": "experiment_delete",
+    "status": "success",
+    "message": "Experiment EXP-20261015-032901-2920 and associated traces deleted.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032901-2920",
+    "details": {},
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032902-b2b4",
+    "timestamp": "2026-10-15T03:29:02.044121",
+    "event_type": "mimicry",
+    "status": "completed",
+    "message": "Applied mimicry for target 'VoIP-like Audio Stream'. Verdict: CLASSIFIER NOT FOOLED.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032901-2920",
+    "details": {
+      "target_profile": "voip_call",
+      "fooled": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032901-8156",
+    "timestamp": "2026-10-15T03:29:01.109458",
+    "event_type": "traffic_generation",
+    "status": "started",
+    "message": "Traffic stream (TCP, 15 packets, mode=pattern) initiated over 127.0.0.1.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032901-2920",
+    "details": {
+      "protocol": "TCP",
+      "payload_mode": "pattern",
+      "filename": null
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032857-e1da",
+    "timestamp": "2026-10-15T03:28:57.681177",
+    "event_type": "experiment_delete",
+    "status": "success",
+    "message": "Experiment EXP-TEST-9999 and associated traces deleted.",
+    "file_id": null,
+    "experiment_id": "EXP-TEST-9999",
+    "details": {},
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-032846-e744",
+    "timestamp": "2026-10-15T03:28:46.761579",
+    "event_type": "traffic_generation",
+    "status": "started",
+    "message": "Traffic stream (TCP, 20 packets, mode=pattern) initiated over 127.0.0.1.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-032846-9679",
+    "details": {
+      "protocol": "TCP",
+      "payload_mode": "pattern",
+      "filename": null
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-031957-ccd8",
+    "timestamp": "2026-10-15T03:19:57.164695",
+    "event_type": "file_transfer",
+    "status": "completed",
+    "message": "File 'Bread_Omelette.png' (993367 B) logged with status completed.",
+    "file_id": "FILE-20261015-031957-8bf5",
+    "experiment_id": "EXP-20261015-031935-4168",
+    "details": {
+      "protocol": "TCP",
+      "sha256": "eed7c9a3363d3fd894bdbddaeffc63a7f0b5bc8cced96b723f4b848634c741af",
+      "integrity_verified": true
+    },
+    "error": null
+  },
+  {
+    "event_id": "LOG-20261015-031935-9d81",
+    "timestamp": "2026-10-15T03:19:35.995032",
+    "event_type": "traffic_generation",
+    "status": "started",
+    "message": "Traffic stream (TCP, 60 packets, mode=file) initiated over 127.0.0.1.",
+    "file_id": null,
+    "experiment_id": "EXP-20261015-031935-4168",
+    "details": {
+      "protocol": "TCP",
+      "payload_mode": "file",
+      "filename": "Bread_Omelette.png"
+    },
+    "error": null
+  },
+  {
     "event_id": "LOG-20261015-030655-38c3",
     "timestamp": "2026-10-15T03:06:55.232498",
     "event_type": "experiment_delete",
