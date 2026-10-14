@@ -5,12 +5,15 @@ import { PacketFlowAnimation } from "./charts.js";
 let flowAnim = null;
 let pollTimer = null;
 let currentExpId = null;
-let miniChart = null;
 
 const SAMPLE_TEXT_SHORT = "Antigravity Security Lab: Local telemetry packet stream active on 127.0.0.1.";
 const SAMPLE_TEXT_LONG = "SECURITY NOTICE: Deep Packet Inspection classifies traffic strictly on statistical behavioral metrics including packet sizes, inter-arrival time distributions, jitter, and burst density. The heuristic classifier completely ignores underlying ASCII/UTF-8 content.";
 
-document.addEventListener("DOMContentLoaded", () => {
+// Active file state
+let selectedFileData = null;
+let preloadedSamples = {};
+
+document.addEventListener("DOMContentLoaded", async () => {
   setupNavigation("generator");
 
   // Init canvas animation
@@ -19,6 +22,16 @@ document.addEventListener("DOMContentLoaded", () => {
     canvas.width = canvas.parentElement.clientWidth || 600;
     flowAnim = new PacketFlowAnimation("flowCanvas");
     flowAnim.start();
+  }
+
+  // Pre-load authentic laboratory sample files from backend
+  try {
+    const res = await API.get("/api/files/samples");
+    if (res && res.samples) {
+      preloadedSamples = res.samples;
+    }
+  } catch (err) {
+    console.warn("Could not pre-load sample files:", err);
   }
 
   // Handle Mode Toggle
@@ -50,33 +63,276 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("customTextInput")?.addEventListener("input", updateTextMetrics);
   document.getElementById("packetSizeInput")?.addEventListener("input", () => {
     updateTextMetrics();
+    updateFileChunkPreview();
     if (flowAnim) {
       flowAnim.configure(parseInt(document.getElementById("packetSizeInput").value) || 512, 60);
     }
   });
 
+  // Protocol Toggle Buttons (TCP vs UDP)
+  const btnProtoTcp = document.getElementById("btnProtoTcp");
+  const btnProtoUdp = document.getElementById("btnProtoUdp");
+  const protocolSelect = document.getElementById("protocolSelect");
+
+  btnProtoTcp?.addEventListener("click", () => {
+    btnProtoTcp.classList.add("active");
+    btnProtoUdp?.classList.remove("active");
+    if (protocolSelect) protocolSelect.value = "TCP";
+  });
+
+  btnProtoUdp?.addEventListener("click", () => {
+    btnProtoUdp.classList.add("active");
+    btnProtoTcp?.classList.remove("active");
+    if (protocolSelect) protocolSelect.value = "UDP";
+  });
+
+  protocolSelect?.addEventListener("change", (e) => {
+    if (e.target.value === "TCP") {
+      btnProtoTcp?.classList.add("active");
+      btnProtoUdp?.classList.remove("active");
+    } else {
+      btnProtoUdp?.classList.add("active");
+      btnProtoTcp?.classList.remove("active");
+    }
+  });
+
+  // Supported Category Pills
+  const categoryPills = document.querySelectorAll("#fileCategoryPills .category-pill");
+  categoryPills.forEach(pill => {
+    pill.addEventListener("click", () => {
+      categoryPills.forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      const cat = pill.getAttribute("data-cat");
+      handleCategoryPillClick(cat);
+    });
+  });
+
+  // File Dropzone & File Input
+  const dropZone = document.getElementById("fileDropZone");
+  const fileInput = document.getElementById("fileTransferInput");
+
+  dropZone?.addEventListener("click", () => {
+    fileInput?.click();
+  });
+
+  dropZone?.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropZone.classList.add("drag-over");
+  });
+
+  dropZone?.addEventListener("dragleave", () => {
+    dropZone.classList.remove("drag-over");
+  });
+
+  dropZone?.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("drag-over");
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleUserFileSelected(e.dataTransfer.files[0]);
+    }
+  });
+
+  fileInput?.addEventListener("change", (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleUserFileSelected(e.target.files[0]);
+    }
+  });
+
+  // Cancel & Retry buttons
+  document.getElementById("btnCancelTransfer")?.addEventListener("click", handleCancelTransfer);
+  document.getElementById("btnRetryTransfer")?.addEventListener("click", () => {
+    document.getElementById("btnGenerate")?.click();
+  });
+
   // Generation form submit
   document.getElementById("trafficForm")?.addEventListener("submit", handleGenerateSubmit);
 
-  // Initial preview
+  // Initial preview setup
   updateTextMetrics();
+  // By default, preselect TXT sample for instant file transfer readiness
+  if (preloadedSamples && preloadedSamples.txt) {
+    loadSampleIntoUI(preloadedSamples.txt);
+  }
 });
 
 function togglePayloadMode(mode) {
   const customSection = document.getElementById("customTextSection");
+  const fileSection = document.getElementById("fileTransferSection");
   const patternSection = document.getElementById("patternSection");
   const packetCountGroup = document.getElementById("packetCountGroup");
+  const directionSection = document.getElementById("directionSection");
+  const protoGroup = document.getElementById("protocolSelectGroup");
+  const liveNodes = document.getElementById("liveNodeStatusGrid");
 
-  if (mode === "custom_text") {
-    customSection?.classList.remove("hidden");
-    patternSection?.classList.add("hidden");
-    packetCountGroup?.classList.add("hidden"); // Auto calculated
-    updateTextMetrics();
-  } else {
+  // Mode card highlights
+  document.querySelectorAll(".mode-card").forEach(c => c.classList.remove("selected"));
+  if (mode === "pattern") {
+    document.getElementById("modeCardPattern")?.classList.add("selected");
     customSection?.classList.add("hidden");
+    fileSection?.classList.add("hidden");
     patternSection?.classList.remove("hidden");
     packetCountGroup?.classList.remove("hidden");
+    directionSection?.classList.remove("hidden");
+    protoGroup?.classList.remove("hidden");
+    liveNodes?.classList.add("hidden");
+  } else if (mode === "custom_text") {
+    document.getElementById("modeCardCustomText")?.classList.add("selected");
+    customSection?.classList.remove("hidden");
+    fileSection?.classList.add("hidden");
+    patternSection?.classList.add("hidden");
+    packetCountGroup?.classList.add("hidden");
+    directionSection?.classList.remove("hidden");
+    protoGroup?.classList.remove("hidden");
+    liveNodes?.classList.add("hidden");
+    updateTextMetrics();
+  } else if (mode === "file") {
+    document.getElementById("modeCardFile")?.classList.add("selected");
+    customSection?.classList.add("hidden");
+    fileSection?.classList.remove("hidden");
+    patternSection?.classList.add("hidden");
+    packetCountGroup?.classList.add("hidden"); // Count is dictated by file size / chunk size
+    protoGroup?.classList.add("hidden"); // In file mode, protocol is selected via top toggle buttons
+    liveNodes?.classList.remove("hidden");
+    updateFileChunkPreview();
   }
+}
+
+async function handleCategoryPillClick(category) {
+  const labelEl = document.getElementById("selectedCategoryLabel");
+  const fileInput = document.getElementById("fileTransferInput");
+
+  if (category === "all") {
+    if (labelEl) labelEl.innerText = "Selected category: All supported files";
+    if (fileInput) fileInput.accept = ".txt,.csv,.png,.jpg,.jpeg,.pdf,.zip,.bin,.dat";
+    return;
+  }
+
+  const catNames = {
+    txt: "TXT Plain Text",
+    csv: "CSV Network Metrics",
+    png: "PNG Image",
+    pdf: "PDF Document",
+    zip: "ZIP Compressed Archive",
+    other: "Other Binary Datagram"
+  };
+
+  const sample = preloadedSamples[category];
+  if (sample) {
+    if (labelEl) labelEl.innerText = `Selected category: ${catNames[category] || category.toUpperCase()} (${sample.filename})`;
+    loadSampleIntoUI(sample);
+    showToast(`Loaded authentic ${sample.category.toUpperCase()} sample (${sample.filename})`, "info");
+  } else {
+    if (labelEl) labelEl.innerText = `Selected category: ${catNames[category] || category.toUpperCase()}`;
+  }
+}
+
+function loadSampleIntoUI(sample) {
+  selectedFileData = {
+    filename: sample.filename,
+    category: sample.category,
+    mime: sample.mime_type,
+    size: sample.size_bytes,
+    sha256: sample.sha256,
+    base64: sample.content_base64
+  };
+  displaySelectedFileCard();
+}
+
+async function handleUserFileSelected(file) {
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const arrayBuf = e.target.result;
+    const uint8Arr = new Uint8Array(arrayBuf);
+    
+    // Convert to binary string for btoa safely
+    let binary = "";
+    const len = uint8Arr.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(uint8Arr[i]);
+    }
+    const base64Data = btoa(binary);
+
+    // Compute SHA-256 via Web Crypto
+    let sha256Hex = "";
+    try {
+      const hashBuf = await crypto.subtle.digest("SHA-256", arrayBuf);
+      const hashArr = Array.from(new Uint8Array(hashBuf));
+      sha256Hex = hashArr.map(b => b.toString(16).padStart(2, "0")).join("");
+    } catch {
+      sha256Hex = "Computing on server...";
+    }
+
+    selectedFileData = {
+      filename: file.name,
+      size: file.size,
+      mime: file.type || "application/octet-stream",
+      category: getCategoryFromFilename(file.name),
+      sha256: sha256Hex,
+      base64: base64Data
+    };
+
+    displaySelectedFileCard();
+    showToast(`Loaded file: ${file.name} (${formatBytes(file.size)})`, "success");
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function getCategoryFromFilename(fname) {
+  const ext = fname.split(".").pop().toLowerCase();
+  if (["txt", "log", "md"].includes(ext)) return "txt";
+  if (["csv", "tsv"].includes(ext)) return "csv";
+  if (["png"].includes(ext)) return "png";
+  if (["pdf"].includes(ext)) return "pdf";
+  if (["zip", "tar", "gz"].includes(ext)) return "zip";
+  return "other";
+}
+
+function displaySelectedFileCard() {
+  if (!selectedFileData) return;
+  const card = document.getElementById("selectedFileCard");
+  if (!card) return;
+
+  card.classList.remove("hidden");
+
+  const icons = {
+    txt: "📄",
+    csv: "📊",
+    png: "🖼️",
+    pdf: "📕",
+    zip: "📦",
+    other: "💾"
+  };
+
+  document.getElementById("selectedFileIcon").innerText = icons[selectedFileData.category] || "📁";
+  document.getElementById("selectedFileName").innerText = selectedFileData.filename;
+  document.getElementById("selectedFileCategoryBadge").innerText = (selectedFileData.category || "BIN").toUpperCase();
+  document.getElementById("selectedFileMime").innerText = selectedFileData.mime || "application/octet-stream";
+  document.getElementById("selectedFileSize").innerText = formatBytes(selectedFileData.size);
+  document.getElementById("selectedFileSha256").innerText = selectedFileData.sha256;
+
+  updateFileChunkPreview();
+}
+
+function updateFileChunkPreview() {
+  if (!selectedFileData) return;
+  const packetSize = parseInt(document.getElementById("packetSizeInput")?.value || "512") || 512;
+  const capacity = Math.max(8, packetSize - 16); // 16-byte header
+  const chunkCount = Math.ceil(selectedFileData.size / capacity) || 1;
+
+  const chunksEl = document.getElementById("selectedFileChunks");
+  if (chunksEl) {
+    chunksEl.innerText = `${chunkCount} chunks (at ${packetSize} B/chunk)`;
+  }
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 async function updateTextMetrics() {
@@ -134,51 +390,85 @@ function renderChunkPreview(chunks) {
 async function handleGenerateSubmit(e) {
   e.preventDefault();
   const btn = document.getElementById("btnGenerate");
-  if (btn) btn.disabled = true;
+  const btnCancel = document.getElementById("btnCancelTransfer");
+  const btnRetry = document.getElementById("btnRetryTransfer");
 
   const mode = document.querySelector('input[name="payload_mode"]:checked')?.value || "pattern";
   const proto = document.getElementById("protocolSelect").value;
   const count = parseInt(document.getElementById("packetCountInput").value) || 60;
   const size = parseInt(document.getElementById("packetSizeInput").value) || 512;
-  const interval = parseFloat(document.getElementById("intervalInput").value) || 15;
+  const interval = parseFloat(document.getElementById("intervalInput").value) || 10;
   const pattern = document.getElementById("patternSelect")?.value || "random";
   const direction = document.getElementById("directionSelect").value;
   const customText = document.getElementById("customTextInput")?.value || "";
 
+  if (mode === "file" && !selectedFileData) {
+    showToast("Please select or drop a file before initiating transfer.", "warning");
+    return;
+  }
+
   // Reset UI
+  if (btn) btn.disabled = true;
+  btnCancel?.classList.remove("hidden");
+  btnRetry?.classList.add("hidden");
+
   document.getElementById("progressBar").style.width = "0%";
   document.getElementById("progressText").innerText = "0%";
   document.getElementById("liveTraceBody").innerHTML = "";
   document.getElementById("receivedBox").classList.add("hidden");
+  document.getElementById("fileResultBox").classList.add("hidden");
+  document.getElementById("postGenActions").classList.add("hidden");
 
   if (flowAnim) {
-    flowAnim.configure(size, interval, "#2563EB");
+    flowAnim.configure(size, interval, proto === "TCP" ? "#2563EB" : "#D97706");
+  }
+
+  const payload = {
+    protocol: proto,
+    packet_count: count,
+    packet_size: size,
+    interval_ms: interval,
+    payload_pattern: pattern,
+    direction: direction,
+    payload_mode: mode
+  };
+
+  if (mode === "custom_text") {
+    payload.custom_text = customText;
+  } else if (mode === "file") {
+    payload.filename = selectedFileData.filename;
+    payload.file_bytes_base64 = selectedFileData.base64;
+    payload.expected_sha256 = selectedFileData.sha256;
   }
 
   try {
-    const res = await API.post("/api/traffic/generate", {
-      protocol: proto,
-      packet_count: count,
-      packet_size: size,
-      interval_ms: interval,
-      payload_pattern: pattern,
-      direction: direction,
-      payload_mode: mode,
-      custom_text: customText
-    });
-
+    const res = await API.post("/api/traffic/generate", payload);
     currentExpId = res.experiment_id;
-    showToast(`Transmission started on 127.0.0.1 (${currentExpId})`, "info");
+    showToast(`Transmission active on 127.0.0.1 (${currentExpId})`, "info");
     startPollingStatus(currentExpId, mode, customText);
-
   } catch (err) {
-    showToast(`Failed to generate traffic: ${err.message}`, "error");
+    showToast(`Failed to initiate transmission: ${err.message}`, "error");
     if (btn) btn.disabled = false;
+    btnCancel?.classList.add("hidden");
+  }
+}
+
+async function handleCancelTransfer() {
+  if (!currentExpId) return;
+  try {
+    await API.post(`/api/traffic/${currentExpId}/cancel`);
+    showToast("Cancellation signal sent to socket engine.", "info");
+  } catch (err) {
+    showToast(`Cancel failed: ${err.message}`, "error");
   }
 }
 
 function startPollingStatus(expId, mode, customText) {
   if (pollTimer) clearInterval(pollTimer);
+
+  const btn = document.getElementById("btnGenerate");
+  const btnCancel = document.getElementById("btnCancelTransfer");
+  const btnRetry = document.getElementById("btnRetryTransfer");
 
   pollTimer = setInterval(async () => {
     try {
@@ -188,6 +478,20 @@ function startPollingStatus(expId, mode, customText) {
       document.getElementById("progressBar").style.width = `${progress}%`;
       document.getElementById("progressText").innerText = `${progress}% (${status.packet_count || 0} packets)`;
 
+      // Update Node Status indicators
+      if (status.sender_status) {
+        document.getElementById("senderNodeStatus").innerText = status.sender_status;
+      }
+      if (status.bytes_sent !== undefined) {
+        document.getElementById("senderBytesStatus").innerText = `${formatBytes(status.bytes_sent)} sent`;
+      }
+      if (status.receiver_status) {
+        document.getElementById("receiverNodeStatus").innerText = status.receiver_status;
+      }
+      if (status.bytes_received !== undefined) {
+        document.getElementById("receiverBytesStatus").innerText = `${formatBytes(status.bytes_received)} received`;
+      }
+
       // Render recent trace
       if (status.packets && status.packets.length > 0) {
         renderLiveTrace(status.packets);
@@ -195,7 +499,9 @@ function startPollingStatus(expId, mode, customText) {
 
       if (status.status === "completed") {
         clearInterval(pollTimer);
-        document.getElementById("btnGenerate").disabled = false;
+        if (btn) btn.disabled = false;
+        btnCancel?.classList.add("hidden");
+        btnRetry?.classList.remove("hidden");
         showToast("Transmission successfully completed on loopback!", "success");
 
         // Show reassembly if custom text
@@ -203,19 +509,42 @@ function startPollingStatus(expId, mode, customText) {
           showReassemblyResult(status);
         }
 
+        // Show reassembly proof if file transfer
+        if (mode === "file") {
+          showFileTransferResult(status);
+        }
+
         // Action links
         document.getElementById("postGenActions").classList.remove("hidden");
         document.getElementById("linkAnalyzeFeatures").href = `features.html?id=${expId}`;
         document.getElementById("linkApplyMimicry").href = `mimicry.html?id=${expId}`;
+
+      } else if (status.status === "incomplete") {
+        clearInterval(pollTimer);
+        if (btn) btn.disabled = false;
+        btnCancel?.classList.add("hidden");
+        btnRetry?.classList.remove("hidden");
+        showToast("UDP Transfer Incomplete: Some datagram chunks were lost.", "warning");
+        if (mode === "file") {
+          showFileTransferResult(status);
+        }
+      } else if (status.status === "cancelled") {
+        clearInterval(pollTimer);
+        if (btn) btn.disabled = false;
+        btnCancel?.classList.add("hidden");
+        btnRetry?.classList.remove("hidden");
+        showToast("Transfer was aborted by user.", "info");
       } else if (status.status === "failed") {
         clearInterval(pollTimer);
-        document.getElementById("btnGenerate").disabled = false;
-        showToast(`Generation failed: ${status.error}`, "error");
+        if (btn) btn.disabled = false;
+        btnCancel?.classList.add("hidden");
+        btnRetry?.classList.remove("hidden");
+        showToast(`Transmission failed: ${status.error}`, "error");
       }
     } catch (e) {
       console.error("Polling error:", e);
     }
-  }, 300);
+  }, 250);
 }
 
 function renderLiveTrace(packets) {
@@ -265,5 +594,51 @@ function showReassemblyResult(status) {
       Lost: ${status.udp_report.lost_count} | Duplicates: ${status.udp_report.duplicate_count} | 
       Out of order: ${status.udp_report.out_of_order_count}
     `;
+  }
+}
+
+function showFileTransferResult(status) {
+  const box = document.getElementById("fileResultBox");
+  if (!box) return;
+
+  box.classList.remove("hidden");
+  document.getElementById("resFileName").innerText = status.filename || (selectedFileData ? selectedFileData.filename : "file.bin");
+  document.getElementById("resFileSize").innerText = formatBytes(status.bytes_received || (selectedFileData ? selectedFileData.size : 0));
+  document.getElementById("resExpectedHash").innerText = (selectedFileData ? selectedFileData.sha256 : "-");
+  document.getElementById("resReceivedHash").innerText = status.file_sha256 || "-";
+
+  const badge = document.getElementById("fileVerificationBadge");
+  const dlBtn = document.getElementById("btnDownloadReconstructed");
+
+  if (status.status === "completed" && status.file_match) {
+    badge.className = "badge badge-green";
+    badge.innerText = "✓ SHA-256 Bit-for-Bit Verified (Lossless Reassembly)";
+    if (dlBtn && status.file_id) {
+      dlBtn.style.display = "inline-flex";
+      dlBtn.href = `/api/files/${status.file_id}/download`;
+      dlBtn.download = status.filename || "reconstructed_file";
+    }
+  } else if (status.status === "incomplete") {
+    badge.className = "badge badge-amber";
+    badge.innerText = "⚠ UDP Transfer Incomplete (Missing Datagrams - File Rejected)";
+    if (dlBtn) dlBtn.style.display = "none";
+  } else {
+    badge.className = "badge badge-red";
+    badge.innerText = "⚠ Integrity Verification Mismatch";
+    if (dlBtn) dlBtn.style.display = "none";
+  }
+
+  // UDP Anomaly Report for Files
+  const udpEl = document.getElementById("fileUdpAnomalyReport");
+  if (status.udp_report && udpEl) {
+    udpEl.classList.remove("hidden");
+    udpEl.innerHTML = `
+      <strong>UDP Datagram Report:</strong> 
+      Sent: ${status.udp_report.sent_count} | Received: ${status.udp_report.received_count} | 
+      Lost: ${status.udp_report.lost_count} | Duplicates: ${status.udp_report.duplicate_count} | 
+      Out of order: ${status.udp_report.out_of_order_count}
+    `;
+  } else if (udpEl) {
+    udpEl.classList.add("hidden");
   }
 }

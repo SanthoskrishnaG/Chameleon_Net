@@ -1,6 +1,6 @@
 """
 Configuration and Directory Management for Protocol Mimicry Engine.
-Enforces loopback-only safety constraints and manages persistent storage locations.
+Enforces loopback-only safety constraints and manages persistent structured JSON storage locations.
 Supports production environment overrides for cloud hosting (Render, Railway, VPS).
 """
 
@@ -8,7 +8,7 @@ import os
 import re
 import json
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Set
 
 # --------------------------------------------------------------------------
 # Base Paths
@@ -24,7 +24,17 @@ RESULTS_DIR = Path(os.environ.get("RESULTS_DIR", BASE_DIR / "results")).resolve(
 CONFIG_DIR = Path(os.environ.get("CONFIG_DIR", BASE_DIR / "config")).resolve()
 WEB_DIR = Path(os.environ.get("WEB_DIR", BASE_DIR / "web")).resolve()
 
-SQLITE_DB_PATH = Path(os.environ.get("SQLITE_DB_PATH", DATA_DIR / "experiments.db")).resolve()
+# Dedicated JSON Storage and Binary Uploads Directories
+STORAGE_DIR = Path(os.environ.get("STORAGE_DIR", DATA_DIR)).resolve()
+UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", DATA_DIR / "uploads")).resolve()
+
+# 5 Core Structured JSON Datasets
+TRANSFERRED_FILES_PATH = STORAGE_DIR / "transferred_files.json"
+ANALYSIS_RESULTS_PATH = STORAGE_DIR / "analysis_results.json"
+EXPERIMENTS_PATH = STORAGE_DIR / "experiments.json"
+LAB_DETAILS_PATH = STORAGE_DIR / "lab_details.json"
+TRANSFER_LOGS_PATH = STORAGE_DIR / "transfer_logs.json"
+
 CLASSIFIER_CONFIG_PATH = CONFIG_DIR / "classifier.json"
 
 # --------------------------------------------------------------------------
@@ -54,14 +64,20 @@ PORT = int(os.environ.get("PORT", 5000))
 HOST = os.environ.get("HOST", "0.0.0.0" if (IS_DEPLOYMENT or os.environ.get("PORT")) else "127.0.0.1")
 
 # Authentication / Access Control
-# If set, mutating operations (traffic gen, mimicry apply, delete, settings) require this API key.
 API_KEY = os.environ.get("API_KEY", "").strip()
 
-# Bounding limits for experiment execution
+# Bounding limits for experiment execution and file transfers
 MAX_ACTIVE_EXPERIMENTS = int(os.environ.get("MAX_ACTIVE_EXPERIMENTS", 3))
 MAX_PACKET_COUNT = int(os.environ.get("MAX_PACKET_COUNT", 1000))
 MAX_PACKET_SIZE = int(os.environ.get("MAX_PACKET_SIZE", 1500))
 MAX_TEXT_LENGTH = int(os.environ.get("MAX_TEXT_LENGTH", 5000))
+
+# Transferred file size limits (Default 10 MB for responsive socket lab transfers)
+MAX_FILE_SIZE_BYTES = int(os.environ.get("MAX_FILE_SIZE_BYTES", 10 * 1024 * 1024))
+ALLOWED_FILE_EXTENSIONS: Set[str] = {
+    ".txt", ".log", ".json", ".csv", ".pcap", ".bin", ".dat",
+    ".pdf", ".png", ".jpg", ".jpeg", ".md", ".html", ".xml"
+}
 
 # --------------------------------------------------------------------------
 # CORS Configuration
@@ -131,8 +147,11 @@ DEFAULT_CLASSIFIER_CONFIG: Dict[str, Any] = {
 
 
 def ensure_directories():
-    """Ensure all required data directories exist."""
-    for d in [DATA_DIR, TRAFFIC_DIR, FEATURES_DIR, EXPERIMENTS_DIR, RESULTS_DIR, CONFIG_DIR, WEB_DIR]:
+    """Ensure all required data and storage directories exist."""
+    for d in [
+        DATA_DIR, TRAFFIC_DIR, FEATURES_DIR, EXPERIMENTS_DIR,
+        RESULTS_DIR, CONFIG_DIR, WEB_DIR, STORAGE_DIR, UPLOADS_DIR
+    ]:
         d.mkdir(parents=True, exist_ok=True)
 
 

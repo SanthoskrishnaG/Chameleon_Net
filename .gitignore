@@ -21,6 +21,8 @@ htmlcov/
 data/traffic/*.csv
 data/features/*.json
 data/experiments/*.json
+data/uploads/*
+data/*.bak
 data/*.db
 data/*.sqlite3
 data/*.sqlite
@@ -32,6 +34,7 @@ results/*.json
 !data/traffic/.gitkeep
 !data/features/.gitkeep
 !data/experiments/.gitkeep
+!data/uploads/.gitkeep
 !results/.gitkeep
 
 # IDE & Editor Files

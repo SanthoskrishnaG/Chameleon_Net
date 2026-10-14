@@ -1,4 +1,4 @@
-﻿{
+{
   "": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "cleanUrls": true,
@@ -12,6 +12,8 @@
     { "source": "/mimicry", "destination": "/web/mimicry.html" },
     { "source": "/comparison", "destination": "/web/comparison.html" },
     { "source": "/results", "destination": "/web/results.html" },
+    { "source": "/files", "destination": "/web/files.html" },
+    { "source": "/logs", "destination": "/web/logs.html" },
     { "source": "/settings", "destination": "/web/settings.html" },
     { "source": "/demo", "destination": "/web/demo.html" },
     { "source": "/css/(.*)", "destination": "/web/css/" },

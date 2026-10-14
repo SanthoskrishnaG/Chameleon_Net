@@ -88,21 +88,28 @@
           </div>
 
           <form id="trafficForm">
-            <!-- Mode Selector -->
+            <!-- Mode Selector (3 Modes) -->
             <label class="form-label">Transmission Mode</label>
-            <div class="mode-select-grid">
-              <label class="mode-card">
+            <div class="mode-select-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+              <label class="mode-card" id="modeCardPattern">
                 <input type="radio" name="payload_mode" value="pattern" checked>
                 <div>
                   <strong>Synthetic Random / Pattern</strong>
                   <div style="font-size:12px; color:var(--text-muted);">Configurable packet counts with pseudo-random or structured byte fills.</div>
                 </div>
               </label>
-              <label class="mode-card">
+              <label class="mode-card" id="modeCardCustomText">
                 <input type="radio" name="payload_mode" value="custom_text">
                 <div>
-                  <strong>Custom User Text (UTF-8 Chunking)</strong>
+                  <strong>Custom User Text (UTF-8)</strong>
                   <div style="font-size:12px; color:var(--text-muted);">Type custom messages; fragments into framed packets and verifies lossless reassembly.</div>
+                </div>
+              </label>
+              <label class="mode-card" id="modeCardFile">
+                <input type="radio" name="payload_mode" value="file">
+                <div>
+                  <strong>File Transfer</strong>
+                  <div style="font-size:12px; color:var(--text-muted);">Transmit real binary files (TXT, CSV, PNG, PDF, ZIP) with framing & SHA-256 verification.</div>
                 </div>
               </label>
             </div>
@@ -128,9 +135,95 @@
               </div>
             </div>
 
+            <!-- File Transfer Section (Matching Mockup Image 2) -->
+            <div id="fileTransferSection" class="hidden" style="background:var(--surface-alt); padding:20px; border-radius:var(--radius-md); border:1px solid var(--border); margin-bottom:20px;">
+              <!-- Header info -->
+              <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:12px;">
+                <div style="background:var(--primary-soft); padding:8px; border-radius:8px; color:var(--primary);">
+                  <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                </div>
+                <div>
+                  <h4 style="margin:0; font-size:16px; font-weight:700; color:var(--text);">Select a file to transfer</h4>
+                  <p style="margin:2px 0 0 0; font-size:13px; color:var(--text-muted);">TXT, CSV, PNG, PDF, ZIP and other supported file types</p>
+                </div>
+              </div>
+              <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">Select the transmission mode and choose what to transfer.</p>
+
+              <!-- Drag and Drop Zone -->
+              <div id="fileDropZone" class="file-dropzone">
+                <input type="file" id="fileTransferInput" style="display:none;" accept=".txt,.csv,.png,.jpg,.jpeg,.pdf,.zip,.bin,.dat">
+                <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+                  <svg width="38" height="38" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--primary);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                  <div style="font-size:15px; font-weight:600; color:var(--text);">Drag and drop a file here</div>
+                  <div style="font-size:13px; color:var(--text-muted);">or select a file using the application</div>
+                </div>
+              </div>
+
+              <!-- Transmission Protocol Toggle Buttons (TCP vs UDP) -->
+              <div style="margin-top:20px;">
+                <label class="form-label" style="font-size:13px; margin-bottom:8px;">Transmission protocol</label>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                  <button type="button" id="btnProtoTcp" class="btn btn-secondary proto-toggle active" style="padding:12px; font-size:13px; font-weight:600; justify-content:center;">
+                    TCP — reliable transfer
+                  </button>
+                  <button type="button" id="btnProtoUdp" class="btn btn-secondary proto-toggle" style="padding:12px; font-size:13px; font-weight:600; justify-content:center;">
+                    UDP — datagram transfer
+                  </button>
+                </div>
+              </div>
+
+              <!-- Supported File Categories Pills -->
+              <div style="margin-top:20px;">
+                <label class="form-label" style="font-size:13px; margin-bottom:8px;">Supported file categories</label>
+                <div style="display:flex; flex-wrap:wrap; gap:8px;" id="fileCategoryPills">
+                  <button type="button" class="category-pill active" data-cat="all">All</button>
+                  <button type="button" class="category-pill" data-cat="txt">TXT</button>
+                  <button type="button" class="category-pill" data-cat="csv">CSV</button>
+                  <button type="button" class="category-pill" data-cat="png">PNG</button>
+                  <button type="button" class="category-pill" data-cat="pdf">PDF</button>
+                  <button type="button" class="category-pill" data-cat="zip">ZIP</button>
+                  <button type="button" class="category-pill" data-cat="other">Other</button>
+                </div>
+                <div id="selectedCategoryLabel" style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+                  Selected category: All supported files
+                </div>
+              </div>
+
+              <!-- Selected File Details Card -->
+              <div id="selectedFileCard" class="hidden" style="margin-top:16px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span id="selectedFileIcon" style="font-size:20px;">📄</span>
+                    <strong id="selectedFileName" style="color:var(--text); font-size:14px;">sample.txt</strong>
+                  </div>
+                  <span id="selectedFileCategoryBadge" class="badge badge-blue">TXT</span>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; font-size:12px; margin-bottom:10px;">
+                  <div>
+                    <span style="color:var(--text-muted);">MIME Type:</span>
+                    <div id="selectedFileMime" style="font-weight:600; font-family:var(--font-mono);">text/plain</div>
+                  </div>
+                  <div>
+                    <span style="color:var(--text-muted);">File Size:</span>
+                    <div id="selectedFileSize" style="font-weight:600; font-family:var(--font-mono);">0 B</div>
+                  </div>
+                  <div>
+                    <span style="color:var(--text-muted);">Calculated Chunks:</span>
+                    <div id="selectedFileChunks" style="font-weight:600; color:var(--primary); font-family:var(--font-mono);">0 chunks</div>
+                  </div>
+                </div>
+                <div>
+                  <span style="font-size:11px; color:var(--text-muted);">Pre-Transmission SHA-256 Checksum:</span>
+                  <div id="selectedFileSha256" style="font-size:11px; font-family:var(--font-mono); word-break:break-all; background:var(--surface-alt); padding:6px 10px; border-radius:6px; margin-top:2px; border:1px solid var(--border);">
+                    -
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Parameters Grid -->
             <div class="form-grid">
-              <div class="form-group">
+              <div id="protocolSelectGroup" class="form-group">
                 <label class="form-label">Transport Protocol</label>
                 <select id="protocolSelect" class="form-select">
                   <option value="TCP" selected>TCP (Stream Socket, Loopback)</option>
@@ -146,14 +239,14 @@
               </div>
 
               <div class="form-group">
-                <label class="form-label">Packet Size (16 - 1460 Bytes)</label>
-                <input type="number" id="packetSizeInput" class="form-input" min="16" max="1460" value="512">
-                <span class="form-helper">Payload size per datagram.</span>
+                <label class="form-label">Chunk / Packet Size (Safe Limits: 64 - 1460 B)</label>
+                <input type="number" id="packetSizeInput" class="form-input" min="64" max="1460" value="512">
+                <span class="form-helper">Framed datagram capacity per socket packet.</span>
               </div>
 
               <div class="form-group">
-                <label class="form-label">Inter-Packet Interval (1 - 1000 ms)</label>
-                <input type="number" id="intervalInput" class="form-input" min="1" max="1000" value="15">
+                <label class="form-label">Inter-Packet Interval (0 - 1000 ms)</label>
+                <input type="number" id="intervalInput" class="form-input" min="0" max="1000" value="10">
                 <span class="form-helper">Pacing delay between sequential sends.</span>
               </div>
 
@@ -167,7 +260,7 @@
                 </select>
               </div>
 
-              <div class="form-group">
+              <div id="directionSection" class="form-group">
                 <label class="form-label">Flow Direction</label>
                 <select id="directionSelect" class="form-select">
                   <option value="client->server" selected>Unidirectional (Client -> Server)</option>
@@ -177,11 +270,19 @@
             </div>
 
             <!-- Action Buttons -->
-            <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center;">
-              <button type="submit" id="btnGenerate" class="btn btn-primary btn-lg">
-                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                Transmit Packets Over Sockets
-              </button>
+            <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+              <div style="display:flex; gap:10px;">
+                <button type="submit" id="btnGenerate" class="btn btn-primary btn-lg">
+                  <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                  Transmit Packets Over Sockets
+                </button>
+                <button type="button" id="btnCancelTransfer" class="btn btn-secondary btn-lg hidden" style="color:var(--danger); border-color:var(--danger-border);">
+                  Cancel Transfer
+                </button>
+                <button type="button" id="btnRetryTransfer" class="btn btn-secondary btn-lg hidden">
+                  Retry Transfer
+                </button>
+              </div>
               <span style="font-size:12px; color:var(--text-muted);">Binds automatically to 127.0.0.1 free ports.</span>
             </div>
           </form>
@@ -194,6 +295,24 @@
             </div>
             <div class="progress-container">
               <div id="progressBar" class="progress-bar"></div>
+            </div>
+
+            <!-- Live Sender and Receiver Node Status Cards -->
+            <div id="liveNodeStatusGrid" class="hidden" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
+              <div class="node-status-card">
+                <div style="display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; color:var(--primary);">
+                  <span>📤 Sender Node (127.0.0.1)</span>
+                </div>
+                <div id="senderNodeStatus" style="font-size:12px; color:var(--text-muted); margin-top:4px;">Idle</div>
+                <div id="senderBytesStatus" style="font-size:11px; font-family:var(--font-mono); color:var(--text); margin-top:2px;">0 B sent</div>
+              </div>
+              <div class="node-status-card">
+                <div style="display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; color:var(--success);">
+                  <span>📥 Receiver Node (127.0.0.1)</span>
+                </div>
+                <div id="receiverNodeStatus" style="font-size:12px; color:var(--text-muted); margin-top:4px;">Idle</div>
+                <div id="receiverBytesStatus" style="font-size:11px; font-family:var(--font-mono); color:var(--text); margin-top:2px;">0 B received</div>
+              </div>
             </div>
           </div>
         </div>
@@ -211,6 +330,41 @@
           </p>
           <div id="receivedTextContent" class="proof-box" style="font-family:var(--font-mono); font-size:13px; color:var(--text); white-space:pre-wrap;"></div>
           <div id="udpAnomalyReport" class="hidden" style="margin-top:10px; font-size:12px; color:var(--warning); background:var(--warning-soft); padding:8px 12px; border-radius:6px;"></div>
+        </div>
+
+        <!-- Reconstructed File Verification Proof Box (For file transfer) -->
+        <div id="fileResultBox" class="card hidden" style="border-left:4px solid var(--success);">
+          <div class="card-header" style="margin-bottom:10px;">
+            <div class="card-title">
+              <span>Reconstructed File Verification Proof</span>
+              <span id="fileVerificationBadge" class="badge badge-green">✓ SHA-256 Bit-for-Bit Verified</span>
+            </div>
+          </div>
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">
+            The receiver collected binary framed chunks over loopback sockets, streamed to a temporary file, verified size & SHA-256, and atomically finalized persistent storage:
+          </p>
+          <div style="background:var(--surface-alt); border:1px solid var(--border); border-radius:8px; padding:12px; font-family:var(--font-mono); font-size:12px; margin-bottom:14px;">
+            <div style="display:grid; grid-template-columns:140px 1fr; gap:6px;">
+              <span style="color:var(--text-muted);">File Name:</span>
+              <strong id="resFileName" style="color:var(--text);">-</strong>
+              <span style="color:var(--text-muted);">Reconstructed Size:</span>
+              <span id="resFileSize">-</span>
+              <span style="color:var(--text-muted);">Expected SHA-256:</span>
+              <span id="resExpectedHash" style="word-break:break-all; color:var(--primary);">-</span>
+              <span style="color:var(--text-muted);">Received SHA-256:</span>
+              <span id="resReceivedHash" style="word-break:break-all; color:var(--success);">-</span>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <a id="btnDownloadReconstructed" href="#" class="btn btn-primary btn-sm" download>
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Download Reconstructed File
+            </a>
+            <a id="btnViewInArchive" href="files.html" class="btn btn-secondary btn-sm">
+              View in Transferred Files Archive →
+            </a>
+          </div>
+          <div id="fileUdpAnomalyReport" class="hidden" style="margin-top:12px; font-size:12px; color:var(--warning); background:var(--warning-soft); padding:8px 12px; border-radius:6px;"></div>
         </div>
 
         <!-- Live Packet Trace Table -->

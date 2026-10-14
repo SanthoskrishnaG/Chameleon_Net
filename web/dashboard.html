@@ -40,7 +40,7 @@
         </div>
 
         <!-- Metric Cards -->
-        <div class="metrics-grid">
+        <div class="metrics-grid" style="grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));">
           <div class="metric-card stagger-1">
             <span class="metric-label">Total Experiments</span>
             <div id="metricTotalExp" class="metric-value">0</div>
@@ -48,15 +48,15 @@
           </div>
 
           <div class="metric-card stagger-2">
-            <span class="metric-label">Classifier Deception Rate</span>
-            <div id="metricFooledRate" class="metric-value" style="color:var(--success);">0%</div>
-            <span class="metric-sub">Successful mimicry reclassifications</span>
+            <span class="metric-label">Transferred Files</span>
+            <div id="metricTotalFiles" class="metric-value" style="color:var(--primary);">0</div>
+            <span class="metric-sub">Stored in persistent JSON</span>
           </div>
 
           <div class="metric-card stagger-3">
-            <span class="metric-label">Avg. Baseline Confidence Shift</span>
-            <div id="metricConfDrop" class="metric-value" style="color:var(--primary);">0%</div>
-            <span class="metric-sub">Perturbation across heuristic rules</span>
+            <span class="metric-label">Classifier Deception Rate</span>
+            <div id="metricFooledRate" class="metric-value" style="color:var(--success);">0%</div>
+            <span class="metric-sub">Successful mimicry reclassifications</span>
           </div>
 
           <div class="metric-card stagger-4">
@@ -97,18 +97,18 @@
             </div>
             <div style="padding:16px; background:var(--surface-alt); border-radius:var(--radius-sm); border-top:3px solid var(--success);">
               <strong style="color:var(--success); font-size:12px;">STAGE 05</strong>
-              <h4 style="font-size:14px; margin:4px 0 6px 0;">Comparison & Delas</h4>
+              <h4 style="font-size:14px; margin:4px 0 6px 0;">Comparison & Deltas</h4>
               <p style="font-size:12px; color:var(--text-muted);">Measures feature deltas, deception verdict, and true network overhead.</p>
             </div>
           </div>
         </div>
 
         <!-- Recent Runs Table -->
-        <div class="card">
+        <div class="card" style="margin-bottom:20px;">
           <div class="card-header">
             <div>
               <h3 class="card-title">Recent Laboratory Experiments</h3>
-              <p class="card-subtitle">Real experiment traces persisted in data/experiments/</p>
+              <p class="card-subtitle">Real experiment traces persisted in data/experiments.json</p>
             </div>
             <a href="results.html" class="btn btn-secondary btn-sm">View All Results</a>
           </div>
@@ -127,6 +127,35 @@
               </thead>
               <tbody id="recentRunsBody">
                 <tr><td colspan="7" style="text-align:center; padding:20px;">Loading experiments...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Recent Transferred Files Table -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Recent Transferred Files & Checksums</h3>
+              <p class="card-subtitle">Structured file records persisted in data/transferred_files.json</p>
+            </div>
+            <a href="files.html" class="btn btn-secondary btn-sm">Manage All Files</a>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>File ID</th>
+                  <th>Filename</th>
+                  <th>Size</th>
+                  <th>Protocol</th>
+                  <th>SHA-256 Checksum</th>
+                  <th>Integrity</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="recentFilesBody">
+                <tr><td colspan="7" style="text-align:center; padding:20px;">Loading transferred files...</td></tr>
               </tbody>
             </table>
           </div>

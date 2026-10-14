@@ -6,6 +6,7 @@ padding markers, and ordered byte-level reassembly with UDP integrity reporting.
 
 import os
 import struct
+import hashlib
 from typing import Dict, Any, List, Tuple, Optional
 
 HEADER_MAGIC = b"MIMC"
@@ -225,3 +226,102 @@ def reassemble_packets(
         "malformed_packets": malformed_count,
         "match": integrity_match
     }
+
+
+def chunk_binary(
+    data: bytes,
+    packet_size: int,
+    pad_last: bool = True
+) -> List[bytes]:
+    """
+    Split raw binary bytes into framed packet chunks with standard laboratory header.
+    """
+    chunk_capacity = max(8, packet_size - HEADER_SIZE)
+    raw_chunks = [data[i:i + chunk_capacity] for i in range(0, len(data), chunk_capacity)]
+    if not raw_chunks:
+        raw_chunks = [b""]
+
+    total_chunks = len(raw_chunks)
+    packets = []
+
+    for seq, chunk in enumerate(raw_chunks):
+        flags = 0
+        is_last = (seq == total_chunks - 1)
+        if is_last:
+            flags |= FLAG_LAST
+
+        dlen = len(chunk)
+        pad_len = packet_size - HEADER_SIZE - dlen
+        if pad_len > 0 and (not is_last or pad_last):
+            flags |= FLAG_PADDED
+            padding = b"\x00" * pad_len
+        else:
+            padding = b""
+
+        header = struct.pack(HEADER_FORMAT, HEADER_MAGIC, seq, total_chunks, dlen, flags)
+        packets.append(header + chunk + padding)
+
+    return packets
+
+
+def reassemble_binary(packets: List[bytes]) -> Dict[str, Any]:
+    """
+    Reassemble received packet bytes into original raw binary bytes.
+    Computes received SHA-256 and tracks UDP packet loss.
+    """
+    parsed_chunks: Dict[int, bytes] = {}
+    total_expected = 0
+    duplicate_count = 0
+    out_of_order_count = 0
+    last_seq_seen = -1
+    malformed_count = 0
+
+    for pkt in packets:
+        if len(pkt) < HEADER_SIZE:
+            malformed_count += 1
+            continue
+        header = pkt[:HEADER_SIZE]
+        try:
+            magic, seq, total_chunks, data_len, flags = struct.unpack(HEADER_FORMAT, header)
+        except Exception:
+            malformed_count += 1
+            continue
+        if magic != HEADER_MAGIC:
+            malformed_count += 1
+            continue
+        if total_chunks > total_expected:
+            total_expected = total_chunks
+        if seq in parsed_chunks:
+            duplicate_count += 1
+        else:
+            if last_seq_seen != -1 and seq < last_seq_seen:
+                out_of_order_count += 1
+            last_seq_seen = seq
+            payload_data = pkt[HEADER_SIZE:HEADER_SIZE + data_len]
+            parsed_chunks[seq] = payload_data
+
+    ordered_bytes = bytearray()
+    missing_seqs = []
+    max_seq = total_expected if total_expected > 0 else (max(parsed_chunks.keys()) + 1 if parsed_chunks else 0)
+
+    for s in range(max_seq):
+        if s in parsed_chunks:
+            ordered_bytes.extend(parsed_chunks[s])
+        else:
+            missing_seqs.append(s)
+
+    raw_data = bytes(ordered_bytes)
+    return {
+        "raw_bytes": raw_data,
+        "sha256": hashlib.sha256(raw_data).hexdigest(),
+        "total_expected": max_seq,
+        "received_unique_packets": len(parsed_chunks),
+        "total_packets_processed": len(packets),
+        "lost_packets": len(missing_seqs),
+        "missing_sequences": missing_seqs,
+        "duplicate_packets": duplicate_count,
+        "out_of_order_packets": out_of_order_count,
+        "malformed_packets": malformed_count,
+        "integrity_ok": len(missing_seqs) == 0 and malformed_count == 0
+    }
+

@@ -1,162 +1,44 @@
 """
 Result Store & Persistence Engine for Protocol Mimicry Engine.
-Provides dual persistence:
-1. SQLite Database (experiments.db) for reliable, crash-resilient production storage.
-2. JSON/CSV file mirror for backward compatibility and laboratory inspectability.
-Supports listing, filtering, search, deletion, and exports in JSON, CSV, and HTML formats.
+Delegates to the dedicated structured JSON persistence module (backend/json_storage.py).
+Maintains full backward compatibility for experiment saving, listing, deletion, and exports.
 """
 
-import os
 import json
 import csv
 import io
-import sqlite3
-import threading
 from pathlib import Path
-from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 
-from backend.config import EXPERIMENTS_DIR, TRAFFIC_DIR, FEATURES_DIR, SQLITE_DB_PATH, ensure_directories
-
-DB_LOCK = threading.Lock()
-
-
-def _get_db_connection() -> sqlite3.Connection:
-    """Create or return an SQLite connection with WAL mode enabled."""
-    ensure_directories()
-    conn = sqlite3.connect(str(SQLITE_DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    with conn:
-        conn.execute("PRAGMA journal_mode = WAL;")
-        conn.execute("PRAGMA synchronous = NORMAL;")
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS experiments (
-                id TEXT PRIMARY KEY,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                protocol TEXT,
-                payload_mode TEXT,
-                category_before TEXT,
-                confidence_before REAL,
-                target_profile TEXT,
-                category_after TEXT,
-                confidence_after REAL,
-                fooled INTEGER DEFAULT 0,
-                status_banner TEXT,
-                text_preview TEXT,
-                data TEXT NOT NULL
-            );
-        """)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_exp_created ON experiments(created_at);")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_exp_proto ON experiments(protocol);")
-    return conn
-
-
-# Initialize table on module load
-try:
-    _conn = _get_db_connection()
-    _conn.close()
-except Exception as e:
-    print(f"[Warning] Failed to initialize SQLite store: {e}")
+from backend.config import EXPERIMENTS_DIR, ensure_directories
+from backend.json_storage import (
+    save_experiment as js_save_experiment,
+    get_experiment as js_get_experiment,
+    list_experiments as js_list_experiments,
+    delete_experiment as js_delete_experiment,
+    log_transfer_event
+)
 
 
 def save_experiment(record: Dict[str, Any]) -> Path:
-    """
-    Save or update an experiment in both SQLite and JSON file format.
-    Returns the path to the JSON file.
-    """
-    exp_id = record.get("id")
-    if not exp_id:
-        raise ValueError("Experiment record must include an 'id' field.")
+    """Save experiment record to persistent JSON storage."""
+    saved = js_save_experiment(record)
+    exp_id = saved.get("id") or saved.get("experiment_id")
 
-    now_iso = datetime.now().isoformat()
-    record["updated_at"] = now_iso
-    if "created_at" not in record:
-        record["created_at"] = now_iso
-
-    # Extract indexed summary columns
-    protocol = record.get("config", {}).get("protocol", "TCP")
-    payload_mode = record.get("config", {}).get("payload_mode", "pattern")
-    cat_before = record.get("classification_before", {}).get("category_name", "Unknown")
-    conf_before = float(record.get("classification_before", {}).get("confidence", 0.0))
-    target_prof = record.get("mimicry_config", {}).get("target_profile_name", "-")
-    cat_after = record.get("classification_after", {}).get("category_name", "-")
-    conf_after = float(record.get("classification_after", {}).get("confidence", 0.0))
-    fooled = 1 if record.get("comparison", {}).get("fooled", False) else 0
-    status_banner = record.get("comparison", {}).get("status_banner", "BASELINE")
-    text_preview = record.get("text_info", {}).get("preview", "")
-
-    json_str = json.dumps(record, indent=2)
-
-    # 1. Persist to SQLite
-    with DB_LOCK:
-        try:
-            conn = sqlite3.connect(str(SQLITE_DB_PATH), check_same_thread=False)
-            with conn:
-                conn.execute("""
-                    INSERT INTO experiments (
-                        id, created_at, updated_at, protocol, payload_mode,
-                        category_before, confidence_before, target_profile,
-                        category_after, confidence_after, fooled, status_banner,
-                        text_preview, data
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        updated_at = excluded.updated_at,
-                        protocol = excluded.protocol,
-                        payload_mode = excluded.payload_mode,
-                        category_before = excluded.category_before,
-                        confidence_before = excluded.confidence_before,
-                        target_profile = excluded.target_profile,
-                        category_after = excluded.category_after,
-                        confidence_after = excluded.confidence_after,
-                        fooled = excluded.fooled,
-                        status_banner = excluded.status_banner,
-                        text_preview = excluded.text_preview,
-                        data = excluded.data;
-                """, (
-                    exp_id, record["created_at"], record["updated_at"], protocol, payload_mode,
-                    cat_before, conf_before, target_prof, cat_after, conf_after, fooled,
-                    status_banner, text_preview, json_str
-                ))
-            conn.close()
-        except Exception as e:
-            print(f"[Warning] Failed writing experiment to SQLite: {e}")
-
-    # 2. Persist to JSON file mirror
     ensure_directories()
     target_path = EXPERIMENTS_DIR / f"{exp_id}.json"
     try:
         with open(target_path, "w", encoding="utf-8") as f:
-            f.write(json_str)
-    except Exception as e:
-        print(f"[Warning] Failed writing experiment JSON file: {e}")
+            json.dump(saved, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
 
     return target_path
 
 
 def get_experiment(exp_id: str) -> Optional[Dict[str, Any]]:
-    """Load single experiment record by ID (checks SQLite first, falls back to disk)."""
-    # 1. Check SQLite
-    with DB_LOCK:
-        try:
-            conn = sqlite3.connect(str(SQLITE_DB_PATH), check_same_thread=False)
-            conn.row_factory = sqlite3.Row
-            row = conn.execute("SELECT data FROM experiments WHERE id = ?", (exp_id,)).fetchone()
-            conn.close()
-            if row and row["data"]:
-                return json.loads(row["data"])
-        except Exception:
-            pass
-
-    # 2. Check JSON file
-    path = EXPERIMENTS_DIR / f"{exp_id}.json"
-    if path.exists():
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return None
-    return None
+    """Retrieve complete experiment by ID from JSON storage."""
+    return js_get_experiment(exp_id)
 
 
 def list_experiments(
@@ -164,134 +46,13 @@ def list_experiments(
     sort_by: str = "created_at",
     descending: bool = True
 ) -> List[Dict[str, Any]]:
-    """List all saved experiments with summary fields from SQLite or JSON."""
-    records_map: Dict[str, Dict[str, Any]] = {}
-
-    # 1. Fetch from SQLite
-    with DB_LOCK:
-        try:
-            conn = sqlite3.connect(str(SQLITE_DB_PATH), check_same_thread=False)
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute("SELECT * FROM experiments").fetchall()
-            conn.close()
-            for r in rows:
-                rec_id = r["id"]
-                # Parse packet count from data if available
-                packet_count = 0
-                try:
-                    p_data = json.loads(r["data"])
-                    packet_count = p_data.get("features_before", {}).get("packet_count", 0)
-                except Exception:
-                    pass
-
-                summary = {
-                    "id": rec_id,
-                    "created_at": r["created_at"],
-                    "protocol": r["protocol"] or "TCP",
-                    "payload_mode": r["payload_mode"] or "pattern",
-                    "packet_count": packet_count,
-                    "category_before": r["category_before"] or "Unknown",
-                    "confidence_before": float(r["confidence_before"] or 0.0),
-                    "target_profile": r["target_profile"] or "-",
-                    "category_after": r["category_after"] or "-",
-                    "confidence_after": float(r["confidence_after"] or 0.0),
-                    "fooled": bool(r["fooled"]),
-                    "status_banner": r["status_banner"] or "BASELINE",
-                    "text_preview": r["text_preview"] or ""
-                }
-                records_map[rec_id] = summary
-        except Exception as e:
-            print(f"[Warning] SQLite list_experiments error: {e}")
-
-    # 2. Reconcile with any JSON files on disk not yet in SQLite
-    if EXPERIMENTS_DIR.exists():
-        for p in EXPERIMENTS_DIR.glob("*.json"):
-            rec_id = p.stem
-            if rec_id not in records_map:
-                try:
-                    with open(p, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        records_map[rec_id] = {
-                            "id": data.get("id", rec_id),
-                            "created_at": data.get("created_at", ""),
-                            "protocol": data.get("config", {}).get("protocol", "TCP"),
-                            "payload_mode": data.get("config", {}).get("payload_mode", "pattern"),
-                            "packet_count": data.get("features_before", {}).get("packet_count", 0),
-                            "category_before": data.get("classification_before", {}).get("category_name", "Unknown"),
-                            "confidence_before": data.get("classification_before", {}).get("confidence", 0.0),
-                            "target_profile": data.get("mimicry_config", {}).get("target_profile_name", "-"),
-                            "category_after": data.get("classification_after", {}).get("category_name", "-"),
-                            "confidence_after": data.get("classification_after", {}).get("confidence", 0.0),
-                            "fooled": data.get("comparison", {}).get("fooled", False),
-                            "status_banner": data.get("comparison", {}).get("status_banner", "BASELINE"),
-                            "text_preview": data.get("text_info", {}).get("preview", "")
-                        }
-                except Exception:
-                    continue
-
-    records = list(records_map.values())
-
-    # Apply search filter
-    if search:
-        q = search.lower()
-        records = [
-            r for r in records
-            if (q in r["id"].lower() or
-                q in r["category_before"].lower() or
-                q in r["category_after"].lower() or
-                q in r["target_profile"].lower() or
-                q in r["protocol"].lower())
-        ]
-
-    def sort_key(item):
-        return item.get(sort_by, "")
-
-    records.sort(key=sort_key, reverse=descending)
-    return records
+    """List experiment summaries from experiments.json."""
+    return js_list_experiments(page=1, per_page=1000, search=search, sort_by=sort_by, descending=descending)
 
 
 def delete_experiment(exp_id: str) -> bool:
-    """Delete an experiment from SQLite, JSON records, and associated traffic files."""
-    deleted = False
-
-    # 1. Delete from SQLite
-    with DB_LOCK:
-        try:
-            conn = sqlite3.connect(str(SQLITE_DB_PATH), check_same_thread=False)
-            with conn:
-                cur = conn.execute("DELETE FROM experiments WHERE id = ?", (exp_id,))
-                if cur.rowcount > 0:
-                    deleted = True
-            conn.close()
-        except Exception:
-            pass
-
-    # 2. Delete JSON file
-    exp_path = EXPERIMENTS_DIR / f"{exp_id}.json"
-    if exp_path.exists():
-        try:
-            exp_path.unlink()
-            deleted = True
-        except Exception:
-            pass
-
-    # 3. Clean up associated traffic CSVs
-    if TRAFFIC_DIR.exists():
-        for p in TRAFFIC_DIR.glob(f"{exp_id}*.csv"):
-            try:
-                p.unlink()
-            except Exception:
-                pass
-
-    # 4. Clean up associated feature JSONs
-    if FEATURES_DIR.exists():
-        for p in FEATURES_DIR.glob(f"{exp_id}*.json"):
-            try:
-                p.unlink()
-            except Exception:
-                pass
-
-    return deleted
+    """Delete experiment from JSON datasets and disk."""
+    return js_delete_experiment(exp_id)
 
 
 def export_experiment(exp_id: str, fmt: str = "json") -> Tuple[str, str, str]:

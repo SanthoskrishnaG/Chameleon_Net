@@ -1,8 +1,8 @@
-# Protocol Mimicry Engine - Production Deployment Guide
+# Protocol Mimicry Engine - Production Deployment & JSON Persistence Guide
 
-This guide provides instructions for deploying the **Protocol Mimicry Engine — Controlled Traffic Analysis Laboratory** using a decoupled production architecture:
+This guide provides complete instructions for deploying the **Protocol Mimicry Engine — Controlled Traffic Analysis Laboratory** using a decoupled production architecture:
 1. **Frontend on Vercel**: High-performance static hosting at the edge.
-2. **Backend on Render (or Railway / Docker VPS)**: Long-running persistent Python web service supporting real TCP/UDP socket telemetry over loopback (`127.0.0.1`).
+2. **Backend on Render (or Railway / Docker VPS)**: Long-running persistent Python web service supporting real TCP/UDP socket telemetry over loopback (`127.0.0.1`) and structured atomic JSON storage.
 
 ---
 
@@ -14,180 +14,146 @@ This guide provides instructions for deploying the **Protocol Mimicry Engine —
          ├─── Static Assets (HTML/CSS/JS/Chart.js) ──► [ Vercel Edge Network ]
          │                                              (Configured via vercel.json)
          │
-         └─── REST API / Telemetry Events ───────────► [ Render Web Service ]
-                                                        (Flask + Gunicorn + SQLite)
-                                                             │
+         └─── REST API / Telemetry Events ───────────► [ Python Networking Backend ]
+                                                        (Flask + Gunicorn + Atomic JSON Engine)
+                                                              │
                                                         [ 127.0.0.1 Loopback ]
                                                         Real TCP/UDP Experiments
+                                                              │
+                                                        [ Structured Datasets & Uploads ]
+                                                        data/storage/*.json & data/uploads/*
 ```
 
-### Why a Decoupled Architecture?
-- **Real Networking Telemetry**: The engine creates real TCP and UDP sockets and transmits actual packets across loopback interfaces to record inter-packet arrival times, sizes, jitter, and burstiness. Serverless platforms (like pure Vercel serverless functions) cannot reliably run persistent raw socket servers or long-running stream generators.
+### Why Decoupled with Persistent JSON Storage?
+- **Real Networking Telemetry**: The engine creates real TCP stream sockets and UDP datagram sockets over loopback (`127.0.0.1`) to record inter-packet arrival times, sizes, jitter, and burstiness. Serverless hosts cannot reliably run raw socket servers or long-running stream generators.
+- **Pure Structured JSON Storage**: The application requires **zero external or SQL database dependencies**. All transferred files, analysis results, mimicry experiments, lab configurations, and audit event logs are persisted in clean, portable JSON datasets.
+- **High Concurrency & Atomicity**: Writes are protected by dataset-level `threading.RLock` mutual exclusion and executed atomically using `tempfile.mkstemp`, `os.replace`, and disk `fsync`. Malformed files are automatically backed up to timestamped `.bak` files and self-healed.
 - **Edge Performance**: Vercel serves the static HTML/CSS/JS instantly with global CDN caching.
-- **State Persistence**: The backend uses an SQLite database (`experiments.db`) with Write-Ahead Logging (WAL) and disk-backed CSV/JSON mirrors, ensuring lab experiments are safely retained across restarts.
 
 ---
 
-## 2. Deploying the Backend (Render)
+## 2. Persistent JSON Storage Datasets
 
-Render is the recommended host because it supports long-running processes, custom ports, persistent disks, and native Python 3 environments.
+The backend organizes all persistent state into 5 structured JSON datasets inside `data/` (or configured via `STORAGE_DIR`), and stores underlying binary files inside `data/uploads/` (or configured via `UPLOADS_DIR`):
 
-### Option A: Using the Render Blueprint (Recommended)
-1. Fork or push this repository to your GitHub account (`SanthoskrishnaG/Chameleon_Net`).
+| Dataset File | Description | Key Schema Attributes |
+| :--- | :--- | :--- |
+| `transferred_files.json` | Complete metadata for all files transferred over loopback sockets. | `file_id`, `original_filename`, `extension`, `mime_type`, `size_bytes`, `sha256`, `received_sha256`, `integrity_verified`, `transport_protocol`, `source_label`, `dest_label`, `storage_path`, `duration_ms`, `status`, `analysis_id`, `experiment_id` |
+| `analysis_results.json` | Statistical features extracted from packet flows and heuristic DPI classification scores. | `analysis_id`, `file_id`, `experiment_id`, `stage`, `transport_protocol`, `packet_count`, `total_bytes`, `mean_size`, `size_std_dev`, `min_size`, `max_size`, `mean_ipt_ms`, `ipt_std_dev_ms`, `jitter_ms`, `throughput_kbps`, `classifier_result`, `classifier_config_version`, `analysis_timestamp`, `execution_status` |
+| `experiments.json` | Complete experimental mimicry runs with baseline vs. transformed comparisons. | `id`, `file_id`, `analysis_before_id`, `analysis_after_id`, `created_at`, `status`, `config`, `features_before`, `features_after`, `classification_before`, `classification_after`, `mimicry_config`, `comparison`, `original_checksum`, `transformed_checksum`, `content_integrity_verified` |
+| `lab_details.json` | Versioned laboratory configuration, safety guard status, and classifier weights. | `lab_name`, `version`, `status`, `safety_guard`, `supported_transports`, `storage_engine`, `datasets`, `classifier_profiles`, `classifier_config`, `limits`, `created_at`, `updated_at` |
+| `transfer_logs.json` | Append-only audit trail logging socket transmissions, uploads, deletions, and errors. | `event_id`, `event_type`, `status`, `message`, `timestamp`, `file_id`, `experiment_id`, `details`, `error` |
+
+### Actual Binary File Storage
+Uploaded files are stored in `data/uploads/<file_id>_<sanitized_filename>`. Filenames are strictly sanitized with path traversal checks (`..`, `/`, `\`) to prevent directory escape. JSON metadata references the stored file path for authorized retrieval.
+
+---
+
+## 3. Deploying the Backend (Render / Railway / VPS)
+
+Render is recommended because it supports persistent disks, custom ports, and long-running Python processes.
+
+### Deploying via Render Blueprint
+1. Push this repository to your GitHub account (`SanthoskrishnaG/Chameleon_Net`).
 2. Log into the [Render Dashboard](https://dashboard.render.com).
 3. Click **New +** > **Blueprint**.
 4. Connect your `Chameleon_Net` repository.
-5. Render will automatically detect `render.yaml` and configure:
+5. Render will automatically read `render.yaml` and configure:
    - **Service Name**: `protocol-mimicry-engine`
    - **Runtime**: `Python`
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `gunicorn backend.app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120`
    - **Health Check Path**: `/api/health`
    - **Persistent Disk**: 1 GB mounted at `/var/data`
-6. Provide your frontend Vercel URL in `ALLOWED_ORIGINS` (or edit after Vercel deployment).
+   - **Environment Variables**: `STORAGE_DIR=/var/data/storage`, `UPLOADS_DIR=/var/data/uploads`
+6. Provide your frontend Vercel URL in `ALLOWED_ORIGINS`.
 7. Click **Apply**.
 
-### Option B: Manual Web Service Setup on Render
-1. In Render Dashboard, click **New +** > **Web Service**.
-2. Connect your repository.
-3. Configure settings:
-   - **Environment**: `Python`
-   - **Region**: Oregon or closest to your users
-   - **Branch**: `main`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `gunicorn backend.app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120`
-4. Add **Environment Variables**:
-   - `DEPLOYMENT_MODE` = `true`
-   - `STRICT_LOCAL_IP_GUARD` = `false`
-   - `ALLOWED_ORIGINS` = `https://your-app.vercel.app` (comma-separated if multiple)
-   - `ALLOW_VERCEL_PREVIEWS` = `true`
-   - `DATA_DIR` = `/var/data` (if using a disk) or `data`
-   - `SQLITE_DB_PATH` = `/var/data/experiments.db` (or `data/experiments.db`)
-   - `API_KEY` = *(optional strong secret)*
-5. (Optional but recommended) Under **Disks**, add a disk:
-   - **Name**: `mimicry-data`
-   - **Mount Path**: `/var/data`
-   - **Size**: 1 GB
-6. Click **Create Web Service**. Note your backend URL (e.g., `https://protocol-mimicry-engine.onrender.com`).
-
 ---
 
-## 3. Deploying the Frontend (Vercel)
+## 4. Deploying the Frontend (Vercel)
 
-The repository includes both root `vercel.json` and `web/vercel.json` to support zero-configuration deployments.
+The repository includes root `vercel.json` and `web/vercel.json` with clean URL rewrites for:
+- `/dashboard` -> `web/dashboard.html`
+- `/files` -> `web/files.html`
+- `/logs` -> `web/logs.html`
+- `/generator` -> `web/generator.html`
+- `/features` -> `web/features.html`
+- `/classifier` -> `web/classifier.html`
+- `/mimicry` -> `web/mimicry.html`
+- `/comparison` -> `web/comparison.html`
+- `/results` -> `web/results.html`
+- `/settings` -> `web/settings.html`
+- `/demo` -> `web/demo.html`
 
-### Option A: Using the Vercel Web Dashboard (Recommended)
+### Deploying via Vercel Dashboard
 1. Log into [Vercel](https://vercel.com).
-2. Click **Add New...** > **Project**.
-3. Import your `Chameleon_Net` repository.
-4. In **Project Configuration**:
-   - **Framework Preset**: `Other`
-   - **Root Directory**: `./` (leave default, `vercel.json` rewrites automatically route to `/web/`)
-   - **Build & Output Settings**: Leave empty (no build step needed for vanilla JS).
-5. (Optional) In **Environment Variables**, you can set:
-   - `CHAMELEON_API_BASE_URL` = `https://protocol-mimicry-engine.onrender.com`
-6. Click **Deploy**.
-
-### Option B: Deploying via Vercel CLI
-```bash
-# Install Vercel CLI if needed
-npm install -g vercel
-
-# From repository root:
-vercel deploy --prod
-```
-
-### Option C: Configuring Backend in Frontend UI
-If you deploy the frontend before setting an environment variable, simply:
-1. Open the deployed Vercel site.
-2. Navigate to **Settings & Rule Weights** in the left sidebar.
-3. Scroll to **3. Backend Service & Cloud Deployment Connection**.
-4. Enter your Render backend URL (e.g., `https://protocol-mimicry-engine.onrender.com`).
-5. (Optional) Enter your `API_KEY` if configured.
-6. Click **Test Connection** to verify connectivity and latency.
-7. Click **Save Backend Settings**. The configuration is stored in browser `localStorage` and will persist across all sessions!
+2. Click **Add New...** > **Project** and import your repository.
+3. In **Project Configuration**, leave Framework Preset as `Other` and Root Directory as `./`.
+4. Click **Deploy**.
+5. Once deployed, open **Settings & Weights** in the dashboard UI, enter your Render backend URL, and click **Test Connection** & **Save Backend Settings**.
 
 ---
 
-## 4. Alternative Backend Hosting
+## 5. Backup and Restore Procedures
 
-### Docker / VPS Deployment
-Use the included `Dockerfile`:
+Because all state is stored cleanly in JSON files and binary uploads, backing up and restoring the engine is fast and deterministic.
+
+### Automated Backup Command
+Run the backup script or shell command to archive all persistent datasets and uploaded binary files:
 ```bash
-# Build the container
-docker build -t chameleon-net .
-
-# Run the container with persistent volume
-docker run -d \
-  --name mimicry-engine \
-  -p 5000:5000 \
-  -e DEPLOYMENT_MODE=true \
-  -e STRICT_LOCAL_IP_GUARD=false \
-  -e ALLOWED_ORIGINS=https://your-project.vercel.app \
-  -v $(pwd)/data:/app/data \
-  chameleon-net
+# Create a timestamped backup archive
+BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
+tar -czvf "backup_mimicry_storage_${BACKUP_DATE}.tar.gz" data/storage data/uploads
 ```
 
-### Railway Deployment
-The repository includes `Procfile`. Simply connect the GitHub repository in Railway and add the environment variables from `.env.example`.
+### Automated Restore Command
+To restore datasets from an archive:
+```bash
+# 1. Stop the backend process
+# 2. Extract the archive into the data root
+tar -xzvf backup_mimicry_storage_YYYYMMDD_HHMMSS.tar.gz -C ./
+
+# 3. Verify dataset integrity
+python -c "from backend.json_storage import get_lab_details, list_transferred_files; print('Lab:', get_lab_details()['lab_name']); print('Files:', list_transferred_files()['total'])"
+
+# 4. Restart the backend process
+```
+
+### Disaster Recovery & Self-Healing
+If a JSON file becomes corrupted due to a host crash or sudden power failure:
+1. The engine automatically detects malformed JSON on read.
+2. It renames the broken file to `<dataset>_corrupt_<timestamp>.bak` so data is never lost.
+3. It initializes a clean dataset structure and logs a high-priority event to `transfer_logs.json`.
+4. The administrator can inspect the `.bak` file or restore from the latest backup tarball.
 
 ---
 
-## 5. Environment Variables Reference
+## 6. Environment Variables Reference
 
 | Variable | Default | Purpose |
 | :--- | :--- | :--- |
-| `PORT` | `5000` | Port for the HTTP API server (set dynamically by Render/Railway). |
+| `PORT` | `5000` | Port for the HTTP API server. |
 | `HOST` | `127.0.0.1` / `0.0.0.0` | Host interface. Set to `0.0.0.0` in cloud hosting to receive public traffic. |
 | `DEPLOYMENT_MODE` | `false` | When `true`, enables production security defaults and CORS protections. |
 | `STRICT_LOCAL_IP_GUARD` | `true` in local, `false` in cloud | When `true`, blocks incoming HTTP requests from non-loopback IP addresses. Must be `false` on cloud hosts. |
 | `ALLOWED_ORIGINS` | *(localhost)* | Comma-separated list of approved frontend origins allowed by CORS. |
 | `ALLOW_VERCEL_PREVIEWS` | `true` | Allows preview deployment URLs matching `https://*.vercel.app`. |
 | `API_KEY` | *(empty)* | Optional secret key. When set, mutating endpoints require header `X-API-Key`. |
-| `DATA_DIR` | `data` | Directory where experiments, traffic CSVs, and features are stored. |
-| `SQLITE_DB_PATH` | `data/experiments.db` | Location of the SQLite database file. |
+| `DATA_DIR` | `data` | Directory where experiments and traffic CSVs are stored. |
+| `STORAGE_DIR` | `data/storage` | Persistent directory for the 5 structured JSON datasets. |
+| `UPLOADS_DIR` | `data/uploads` | Persistent directory for binary/uploaded payload files. |
+| `MAX_FILE_SIZE_BYTES` | `10485760` (10 MB) | Maximum upload file size in bytes. |
 | `MAX_ACTIVE_EXPERIMENTS` | `3` | Maximum concurrent background experiment processes. |
 | `MAX_PACKET_COUNT` | `1000` | Maximum allowable packets in a single traffic generation request. |
 | `MAX_PACKET_SIZE` | `1500` | Maximum bytes per packet (bounded by standard MTU). |
-| `MAX_TEXT_LENGTH` | `5000` | Maximum length in characters for custom text payload transmission. |
 
 ---
 
-## 6. Security and Safety Guarantees
+## 7. Security and Safety Guarantees
 
-1. **Loopback-Only Telemetry Isolation**: Real TCP and UDP transmission always occurs strictly on `127.0.0.1`. The engine will never transmit packets to external internet IPs or internal LAN hosts. Arbitrary destination addresses are rejected with HTTP 400.
-2. **Path Traversal Protection**: Experiment IDs are strictly validated using regex `^[a-zA-Z0-9_-]{1,64}$`. Directory traversal attempts (e.g. `../../etc/passwd`) are rejected with HTTP 400/404.
-3. **No Wildcard CORS with Credentials**: CORS only allows explicitly approved origins and validated `*.vercel.app` preview URLs.
-4. **Resilient Dual Storage**: Experiment index metadata is stored in SQLite (`experiments.db`) with WAL mode for crash recovery, alongside mirrored JSON/CSV records for raw packet analysis.
-5. **Sanitized Error Responses**: Internal tracebacks and sensitive environment variables are never exposed in API responses.
-
----
-
-## 7. Verification and Testing
-
-### Run Automated Test Suite
-From the project root:
-```bash
-python -m pytest -v
-```
-All 30+ tests will pass, verifying:
-- Loopback guard and anti-proxy destination safety
-- Real TCP and UDP packet generation
-- Feature extraction (mean size, IPT, jitter, burstiness)
-- DPI rule classification and mimicry transformation
-- Reassembly equality and UTF-8 custom text integrity
-- SQLite persistence across simulated restarts
-- CORS origin authorization and API key enforcement
-
-### Manual API Smoke Checks
-```bash
-# 1. Check health
-curl -s https://your-backend.onrender.com/api/health
-
-# 2. Test CORS with Origin
-curl -I -X GET https://your-backend.onrender.com/api/health \
-  -H "Origin: https://your-app.vercel.app"
-
-# 3. List profiles
-curl -s https://your-backend.onrender.com/api/profiles
-```
+1. **Loopback-Only Telemetry Isolation**: Real TCP and UDP transmissions strictly use `127.0.0.1`. The engine will never transmit packets to external internet IPs or internal LAN hosts. Arbitrary destination addresses are rejected with HTTP 400.
+2. **Zero SQL Injection Risk**: Pure JSON file persistence eliminates SQL injection attack surfaces entirely.
+3. **Path Traversal Protection**: Filenames and record IDs are sanitized with regex validation and checked with `os.path.resolve()`. Any path outside `UPLOADS_DIR` or `STORAGE_DIR` is rejected with HTTP 403.
+4. **Content-Integrity Verification**: Transferred files have SHA-256 computed from raw bytes before transmission and recomputed after socket reassembly, verifying 100% bit-exact transmission.
+5. **No Wildcard CORS with Credentials**: CORS only allows explicitly approved origins and validated `*.vercel.app` preview URLs.

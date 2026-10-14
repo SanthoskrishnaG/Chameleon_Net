@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transfer Logs & Audit Trail - Protocol Mimicry Engine</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside id="appSidebar" class="sidebar"></aside>
+
+    <main class="main-content">
+      <header id="appTopbar" class="topbar"></header>
+
+      <div class="content-body fade-in">
+        <!-- Title & Action -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:20px; font-weight:800; display:flex; align-items:center; gap:8px;">
+              <span>Transfer Logs & Audit Trail</span>
+              <span class="badge badge-purple">Audit Log</span>
+            </h2>
+            <p style="color:var(--text-muted); font-size:13px;">
+              Immutable event log persisted in transfer_logs.json for socket transmissions, mimicry runs, and laboratory changes.
+            </p>
+          </div>
+          <button id="btnRefreshLogs" class="btn btn-secondary">
+            ↻ Refresh Logs
+          </button>
+        </div>
+
+        <!-- Metric KPI Cards -->
+        <div class="grid grid-4" style="margin-bottom:20px;">
+          <div class="card stat-card">
+            <span class="stat-label">Total Audit Events</span>
+            <span class="stat-value" id="statTotalLogs">0</span>
+            <span class="stat-sub">Persisted in transfer_logs.json</span>
+          </div>
+          <div class="card stat-card">
+            <span class="stat-label">Successful Events</span>
+            <span class="stat-value" id="statSuccessLogs" style="color:var(--success);">0</span>
+            <span class="stat-sub">Completed transfers & experiments</span>
+          </div>
+          <div class="card stat-card">
+            <span class="stat-label">Failed / Warn Events</span>
+            <span class="stat-value" id="statFailedLogs" style="color:var(--danger);">0</span>
+            <span class="stat-sub">Anomalies & socket errors</span>
+          </div>
+          <div class="card stat-card">
+            <span class="stat-label">Persistence Mode</span>
+            <span class="stat-value" style="font-size:18px;">Atomic JSON</span>
+            <span class="stat-sub">Thread-safe single writer</span>
+          </div>
+        </div>
+
+        <!-- Filter & Search Controls -->
+        <div class="card" style="padding:14px; margin-bottom:18px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="flex:1; min-width:260px;">
+              <input type="text" id="searchLogInput" class="form-input" placeholder="Search by message, event ID, file ID, experiment ID, or error...">
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <select id="filterEventType" class="form-select" style="width:160px;">
+                <option value="">All Event Types</option>
+                <option value="file_transfer">file_transfer</option>
+                <option value="experiment_save">experiment_save</option>
+                <option value="experiment_delete">experiment_delete</option>
+                <option value="file_delete">file_delete</option>
+                <option value="config_update">config_update</option>
+              </select>
+              <select id="filterLogStatus" class="form-select" style="width:130px;">
+                <option value="">All Statuses</option>
+                <option value="success">Success</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Logs Table -->
+        <div class="card">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Event Type</th>
+                  <th>Status</th>
+                  <th>Message / Action</th>
+                  <th>Associated File</th>
+                  <th>Associated Experiment</th>
+                  <th>Error / Detail</th>
+                </tr>
+              </thead>
+              <tbody id="logsTableBody">
+                <tr><td colspan="7" style="text-align:center; padding:24px;">Loading transfer logs...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Pagination -->
+          <div id="logsPagination" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-top:1px solid var(--border);">
+            <span style="font-size:12px; color:var(--text-muted);" id="logsPageInfo">Showing 0 of 0 events</span>
+            <div style="display:flex; gap:6px;">
+              <button id="btnPrevLogPage" class="btn btn-secondary btn-sm" disabled>« Previous</button>
+              <button id="btnNextLogPage" class="btn btn-secondary btn-sm" disabled>Next »</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <footer id="appFooter" class="app-footer"></footer>
+    </main>
+  </div>
+
+  <script type="module" src="js/logs.js"></script>
+</body>
+</html>

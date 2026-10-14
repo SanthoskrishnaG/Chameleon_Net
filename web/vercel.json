@@ -1,4 +1,4 @@
-﻿{
+{
   "": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "cleanUrls": true,
@@ -12,6 +12,8 @@
     { "source": "/mimicry", "destination": "/mimicry.html" },
     { "source": "/comparison", "destination": "/comparison.html" },
     { "source": "/results", "destination": "/results.html" },
+    { "source": "/files", "destination": "/files.html" },
+    { "source": "/logs", "destination": "/logs.html" },
     { "source": "/settings", "destination": "/settings.html" },
     { "source": "/demo", "destination": "/demo.html" }
   ]

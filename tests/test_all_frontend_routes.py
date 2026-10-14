@@ -157,3 +157,63 @@ def test_complete_frontend_route_lifecycle():
 
     # Verify deleted
     assert get_experiment(exp_id) is None
+
+    # 19. Persistent JSON Storage: File Transfer, Listing, Download & Deletion
+    file_transfer_res = client.post("/api/files/transfer", json={
+        "filename": "route_test_doc.txt",
+        "content_text": "Validation payload for persistent JSON endpoint suite.",
+        "protocol": "TCP",
+        "packet_size": 64,
+        "interval_ms": 1.0
+    })
+    assert file_transfer_res.status_code == 200
+    file_info = file_transfer_res.get_json()["file"]
+    test_file_id = file_info["file_id"]
+
+    # 20. List Files (JSON)
+    files_list_res = client.get("/api/files")
+    assert files_list_res.status_code == 200
+    files_data = files_list_res.get_json()
+    assert any(f["file_id"] == test_file_id for f in files_data["files"])
+
+    # 21. Get Single File Metadata
+    file_meta_res = client.get(f"/api/files/{test_file_id}")
+    assert file_meta_res.status_code == 200
+    assert file_meta_res.get_json()["original_filename"] == "route_test_doc.txt"
+
+    # 22. Download Transferred File
+    download_res = client.get(f"/api/files/{test_file_id}/download")
+    assert download_res.status_code == 200
+    assert b"Validation payload for persistent JSON endpoint suite." in download_res.data
+
+    # 23. File Analysis Endpoint
+    file_analysis_res = client.get(f"/api/files/{test_file_id}/analysis")
+    assert file_analysis_res.status_code == 200
+    assert len(file_analysis_res.get_json()["analyses"]) >= 1
+
+    # 24. Global Analysis Results Dataset
+    all_analysis_res = client.get("/api/analysis")
+    assert all_analysis_res.status_code == 200
+    assert "analyses" in all_analysis_res.get_json()
+
+    # 25. Lab Details GET & PUT
+    lab_details_res = client.get("/api/lab/details")
+    assert lab_details_res.status_code == 200
+    lab_data = lab_details_res.get_json()
+    assert "supported_transports" in lab_data
+
+    lab_put_res = client.put("/api/lab/details", json={"status": "online", "limits": {"max_file_size_bytes": 10485760}})
+    assert lab_put_res.status_code == 200
+    assert lab_put_res.get_json()["status"] == "updated"
+
+    # 26. Transfer Logs Audit Trail
+    logs_res = client.get("/api/logs")
+    assert logs_res.status_code == 200
+    logs_data = logs_res.get_json()
+    assert len(logs_data["logs"]) >= 1
+
+    # 27. Delete File
+    del_file_res = client.delete(f"/api/files/{test_file_id}")
+    assert del_file_res.status_code == 200
+    assert del_file_res.get_json()["status"] == "deleted"
+

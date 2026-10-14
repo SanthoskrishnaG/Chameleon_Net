@@ -1,0 +1,53 @@
+{
+  "lab_name": "Protocol Mimicry Engine — Controlled Traffic Analysis Laboratory",
+  "version": "1.0.0",
+  "description": "Educational computer-networks laboratory demonstrating heuristic DPI traffic classification and controlled protocol mimicry.",
+  "status": "online",
+  "safety_guard": "127.0.0.1 Loopback Only (No packet injection, no external proxying)",
+  "supported_transports": [
+    "TCP",
+    "UDP"
+  ],
+  "storage_engine": "Structured Atomic JSON Persistence",
+  "datasets": {
+    "transferred_files": "data/storage/transferred_files.json",
+    "analysis_results": "data/storage/analysis_results.json",
+    "experiments": "data/storage/experiments.json",
+    "lab_details": "data/storage/lab_details.json",
+    "transfer_logs": "data/storage/transfer_logs.json"
+  },
+  "classifier_profiles": [
+    "bulk_transfer",
+    "voip_call",
+    "dns_lookup",
+    "video_stream",
+    "interactive_shell"
+  ],
+  "classifier_config": {
+    "weights": {
+      "packet_size": 0.25,
+      "timing": 0.25,
+      "volume": 0.15,
+      "burst_jitter": 0.2,
+      "transport": 0.15
+    },
+    "thresholds": {
+      "high_confidence": 80.0,
+      "moderate_confidence": 50.0
+    },
+    "tolerances": {
+      "size_decay_bytes": 350.0,
+      "timing_decay_ms": 60.0,
+      "volume_decay_count": 80.0,
+      "jitter_decay_ms": 25.0,
+      "burst_decay_len": 4.0
+    },
+    "burst_ipt_threshold_ms": 20.0
+  },
+  "limits": {
+    "max_file_size_bytes": 10485760
+  },
+  "created_at": "2026-10-15T01:40:52.564843",
+  "updated_at": "2026-10-15T02:59:18.258001",
+  "operator": "Antigravity Network Engineer"
+}

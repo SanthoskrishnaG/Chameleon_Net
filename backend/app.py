@@ -1,44 +1,61 @@
 """
 Flask REST API and Static Server for Protocol Mimicry Engine.
-Provides deployment-safe security, CORS control, input validation, and loopback safety.
-Compatible with Vercel frontend and persistent Python hosting (Render, Railway, VPS).
+Provides deployment-safe security, CORS control, input validation, loopback safety,
+and persistent structured JSON storage across 5 core laboratory datasets:
+1. transferred_files.json
+2. analysis_results.json
+3. experiments.json
+4. lab_details.json
+5. transfer_logs.json
 """
 
 import os
 import re
 import json
 import time
-import uuid
+import base64
 import logging
 import threading
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from flask import Flask, request, jsonify, send_from_directory, Response, abort
 from flask_cors import CORS
 
 from backend.config import (
     BASE_DIR, WEB_DIR, TRAFFIC_DIR, FEATURES_DIR, EXPERIMENTS_DIR,
+    STORAGE_DIR, UPLOADS_DIR,
     PORT, HOST, API_KEY, STRICT_LOCAL_IP_GUARD, IS_DEPLOYMENT,
     MAX_ACTIVE_EXPERIMENTS, MAX_PACKET_COUNT, MAX_PACKET_SIZE, MAX_TEXT_LENGTH,
+    MAX_FILE_SIZE_BYTES, ALLOWED_FILE_EXTENSIONS,
     is_loopback, is_origin_allowed, get_allowed_origins,
     load_classifier_config, save_classifier_config, reset_classifier_config
 )
 from backend.profiles import get_profiles, get_profile_list, get_profile
 from backend.text_payload import preview_chunks, validate_text
-from backend.traffic_generator import TrafficGenerator, get_task_status, GENERATION_TASKS, TASKS_LOCK
+from backend.traffic_generator import TrafficGenerator, get_task_status, cancel_generation, GENERATION_TASKS, TASKS_LOCK
 from backend.feature_extractor import extract_and_save_features, load_saved_features
 from backend.dpi_classifier import classify_traffic
 from backend.mimicry_engine import MimicryEngine
 from backend.comparator import compare_features_and_classification
-from backend.result_store import (
-    save_experiment, get_experiment, list_experiments, delete_experiment, export_experiment
+from backend.file_validator import validate_file_content
+from backend.file_samples import get_all_samples_metadata
+
+# Persistent JSON Storage Engine
+from backend.json_storage import (
+    save_transferred_file, get_transferred_file, list_transferred_files,
+    delete_transferred_file, store_binary_file, compute_sha256, detect_mime_type, sanitize_filename,
+    save_analysis_result, get_analysis_result, get_analysis_by_experiment, list_analysis_results,
+    save_experiment, get_experiment, list_experiments, delete_experiment, export_experiment,
+    get_lab_details, update_lab_details, reset_lab_details,
+    log_transfer_event, list_transfer_logs
 )
 
 # Initialize Flask Application
 app = Flask(__name__, static_folder=str(WEB_DIR), static_url_path="")
 app.config["JSON_SORT_KEYS"] = False
+app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE_BYTES + (1024 * 1024)  # Include header overhead
 
 # Enable CORS with configured origins (supports credentials=False for security)
 CORS(app, resources={r"/api/*": {"origins": "*" if not IS_DEPLOYMENT else get_allowed_origins()}}, supports_credentials=False)
@@ -47,14 +64,14 @@ CORS(app, resources={r"/api/*": {"origins": "*" if not IS_DEPLOYMENT else get_al
 DEMO_RUNS: Dict[str, Dict[str, Any]] = {}
 DEMO_LOCK = threading.Lock()
 
-# Experiment ID Validation Pattern (alphanumeric, hyphens, underscores; prevents path traversal)
-EXP_ID_REGEX = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+# Experiment & File ID Validation Pattern (prevents path traversal)
+IDENTIFIER_REGEX = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 START_TIME = datetime.now()
 
 
-def validate_id_format(identifier: str, field_name: str = "Experiment ID") -> None:
+def validate_id_format(identifier: str, field_name: str = "ID") -> None:
     """Validate identifier syntax against directory traversal and shell injection."""
-    if not identifier or not EXP_ID_REGEX.match(identifier):
+    if not identifier or not IDENTIFIER_REGEX.match(identifier):
         abort(400, description=f"{field_name} is invalid. Allowed: alphanumeric, hyphens, underscores (1-64 chars).")
 
 
@@ -64,11 +81,9 @@ def validate_id_format(identifier: str, field_name: str = "Experiment ID") -> No
 @app.before_request
 def security_guard():
     """Deployment-safe security middleware."""
-    # 1. Fast path for CORS preflight
     if request.method == "OPTIONS":
         return "", 200
 
-    # 2. Strict Local IP Guard (enabled in standalone offline mode or via STRICT_LOCAL_IP_GUARD=true)
     if STRICT_LOCAL_IP_GUARD:
         remote_ip = request.remote_addr
         if not is_loopback(remote_ip):
@@ -77,9 +92,7 @@ def security_guard():
                 "remote_addr": remote_ip
             }), 403
 
-    # 3. Authentication for mutating endpoints when API_KEY is configured
     if API_KEY and request.path.startswith("/api/") and request.method in ("POST", "PUT", "DELETE"):
-        # Exclude read-only preview from mandatory auth
         if request.path != "/api/text/preview":
             provided_key = (
                 request.headers.get("X-API-Key") or
@@ -110,7 +123,7 @@ def add_security_and_cors_headers(response):
 
 
 # --------------------------------------------------------------------------
-# Centralized Error Handlers (Clean JSON, never leak stack traces)
+# Centralized Error Handlers
 # --------------------------------------------------------------------------
 @app.errorhandler(400)
 def handle_bad_request(e):
@@ -141,6 +154,11 @@ def handle_method_not_allowed(e):
     return jsonify({"error": "HTTP method not allowed", "status_code": 405}), 405
 
 
+@app.errorhandler(413)
+def handle_file_too_large(e):
+    return jsonify({"error": f"File exceeds maximum allowed size ({MAX_FILE_SIZE_BYTES // (1024*1024)} MB).", "status_code": 413}), 413
+
+
 @app.errorhandler(429)
 def handle_rate_limit(e):
     msg = e.description if hasattr(e, "description") else "Too many requests. Please wait."
@@ -157,7 +175,7 @@ def handle_internal_error(e):
 
 
 # --------------------------------------------------------------------------
-# Static Web Pages & Assets (For standalone / local development)
+# Static Web Pages & Assets
 # --------------------------------------------------------------------------
 @app.route("/")
 def index():
@@ -180,12 +198,16 @@ def serve_static(path):
 
 
 # --------------------------------------------------------------------------
-# API Routes
+# Laboratory Status & Health API
 # --------------------------------------------------------------------------
 @app.route("/api/health", methods=["GET"])
 def api_health():
-    """Health check, deployment state, and laboratory status."""
+    """Health check, dataset statuses, and laboratory capabilities."""
     uptime_sec = round((datetime.now() - START_TIME).total_seconds(), 1)
+    file_stats = list_transferred_files(per_page=1)
+    log_stats = list_transfer_logs(per_page=1)
+    exp_stats = list_experiments()
+
     return jsonify({
         "status": "online",
         "engine": "Protocol Mimicry Engine Laboratory",
@@ -194,12 +216,25 @@ def api_health():
         "timestamp": datetime.now().isoformat(),
         "deployment_mode": IS_DEPLOYMENT,
         "loopback_only": True,
-        "storage": "sqlite+filesystem",
+        "storage": "Structured Persistent JSON (5 Datasets)",
+        "datasets": {
+            "transferred_files": "data/transferred_files.json",
+            "analysis_results": "data/analysis_results.json",
+            "experiments": "data/experiments.json",
+            "lab_details": "data/lab_details.json",
+            "transfer_logs": "data/transfer_logs.json"
+        },
+        "counts": {
+            "transferred_files": file_stats.get("total", 0),
+            "experiments": len(exp_stats),
+            "transfer_logs": log_stats.get("total", 0)
+        },
         "auth_required": bool(API_KEY),
         "capabilities": {
             "real_tcp_sockets": True,
             "real_udp_sockets": True,
-            "feature_extraction": True,
+            "file_transfers": True,
+            "sha256_verification": True,
             "heuristic_dpi_classifier": True,
             "protocol_mimicry": True,
             "text_preservation": True
@@ -216,6 +251,435 @@ def api_profiles():
     })
 
 
+# --------------------------------------------------------------------------
+# Transferred Files APIs
+# --------------------------------------------------------------------------
+@app.route("/api/files/samples", methods=["GET"])
+def api_files_samples():
+    """Retrieve pre-packaged authentic sample files for TXT, CSV, PNG, PDF, and ZIP."""
+    return jsonify({
+        "status": "success",
+        "samples": get_all_samples_metadata()
+    })
+
+
+@app.route("/api/files/preview", methods=["POST"])
+def api_files_preview():
+    """Validate uploaded binary file content and calculate checksum & framing chunks preview."""
+    raw_bytes = None
+    filename = "transfer.bin"
+    packet_size = 512
+
+    if request.content_type and "multipart/form-data" in request.content_type:
+        uploaded_file = request.files.get("file")
+        if not uploaded_file or not uploaded_file.filename:
+            return jsonify({"error": "No file uploaded in 'file' field."}), 400
+        filename = uploaded_file.filename
+        raw_bytes = uploaded_file.read()
+        packet_size = int(request.form.get("packet_size", 512))
+    else:
+        data = request.get_json(silent=True) or {}
+        filename = data.get("filename", "transfer.bin")
+        packet_size = int(data.get("packet_size", 512))
+        if "content_base64" in data:
+            try:
+                raw_bytes = base64.b64decode(data["content_base64"])
+            except Exception:
+                return jsonify({"error": "Invalid base64 encoding in content_base64."}), 400
+        elif "content_text" in data:
+            raw_bytes = data["content_text"].encode("utf-8")
+        else:
+            return jsonify({"error": "Must provide 'file' multipart or 'content_base64'/'content_text' JSON."}), 400
+
+    if not raw_bytes or len(raw_bytes) == 0:
+        return jsonify({"error": "File content cannot be empty."}), 400
+
+    try:
+        val_meta = validate_file_content(filename, raw_bytes, max_bytes=MAX_FILE_SIZE_BYTES)
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+
+    sha256 = compute_sha256(raw_bytes)
+    capacity = max(8, packet_size - 16)
+    chunk_count = (len(raw_bytes) + capacity - 1) // capacity
+
+    return jsonify({
+        "status": "success",
+        "filename": val_meta["sanitized_filename"],
+        "category": val_meta["category"],
+        "mime_type": val_meta["mime_type"],
+        "size_bytes": len(raw_bytes),
+        "sha256": sha256,
+        "packet_size": packet_size,
+        "chunk_capacity": capacity,
+        "chunk_count": chunk_count
+    })
+
+
+@app.route("/api/files/transfer", methods=["POST"])
+def api_files_transfer():
+    """
+    Upload and transfer a file across real loopback sockets (TCP or UDP).
+    Computes SHA-256 before & after transfer, verifies integrity,
+    extracts features, performs classification, and persists to JSON.
+    """
+    raw_bytes = None
+    filename = "file.bin"
+    protocol = "TCP"
+    packet_size = 512
+    interval_ms = 5.0
+
+    # 1. Parse Multipart Form Upload or JSON Payload
+    if request.content_type and "multipart/form-data" in request.content_type:
+        uploaded_file = request.files.get("file")
+        if not uploaded_file or not uploaded_file.filename:
+            return jsonify({"error": "No file uploaded in 'file' form field."}), 400
+        filename = uploaded_file.filename
+        raw_bytes = uploaded_file.read()
+        protocol = request.form.get("protocol", "TCP").upper()
+        packet_size = int(request.form.get("packet_size", 512))
+        interval_ms = float(request.form.get("interval_ms", 5.0))
+    else:
+        data = request.get_json(silent=True) or {}
+        filename = data.get("filename", "transfer.txt")
+        protocol = data.get("protocol", "TCP").upper()
+        packet_size = int(data.get("packet_size", 512))
+        interval_ms = float(data.get("interval_ms", 5.0))
+
+        if "content_base64" in data:
+            try:
+                raw_bytes = base64.b64decode(data["content_base64"])
+            except Exception:
+                return jsonify({"error": "Invalid base64 encoding in content_base64."}), 400
+        elif "content_text" in data:
+            raw_bytes = data["content_text"].encode("utf-8")
+        else:
+            return jsonify({"error": "Must provide 'file' multipart or 'content_base64'/'content_text' JSON."}), 400
+
+    # 2. Validate File Parameters
+    if not raw_bytes or len(raw_bytes) == 0:
+        return jsonify({"error": "File content cannot be empty."}), 400
+    if len(raw_bytes) > MAX_FILE_SIZE_BYTES:
+        return jsonify({"error": f"File size ({len(raw_bytes)} bytes) exceeds limit ({MAX_FILE_SIZE_BYTES} bytes)."}), 400
+
+    try:
+        val_res = validate_file_content(filename, raw_bytes, max_bytes=MAX_FILE_SIZE_BYTES)
+        filename = val_res["sanitized_filename"]
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+
+    ext = Path(filename).suffix.lower()
+    if ext not in ALLOWED_FILE_EXTENSIONS and ext != "":
+        return jsonify({"error": f"File extension '{ext}' not allowed. Permitted: {', '.join(sorted(ALLOWED_FILE_EXTENSIONS))}"}), 400
+
+    if protocol not in ("TCP", "UDP"):
+        return jsonify({"error": "Protocol must be 'TCP' or 'UDP'."}), 400
+
+    packet_size = max(64, min(packet_size, MAX_PACKET_SIZE))
+    interval_ms = max(0.0, min(interval_ms, 1000.0))
+
+    # 3. Store Original File & Calculate SHA-256
+    start_time = datetime.now()
+    start_iso = start_time.isoformat()
+    file_id = f"FILE-{start_time.strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
+    original_sha256 = compute_sha256(raw_bytes)
+
+    try:
+        storage_path, _ = store_binary_file(file_id, filename, raw_bytes)
+    except Exception as e:
+        return jsonify({"error": f"Failed to store file: {e}"}), 500
+
+    # 4. Transmit over Real Socket Loopback
+    gen = TrafficGenerator()
+    exp_id = gen.experiment_id
+
+    t0 = time.time()
+    try:
+        gen._worker({
+            "protocol": protocol,
+            "packet_size": packet_size,
+            "interval_ms": interval_ms,
+            "direction": "client->server",
+            "payload_mode": "file",
+            "file_bytes": raw_bytes,
+            "sent_sha256": original_sha256
+        })
+    except Exception as e:
+        log_transfer_event(
+            event_type="file_transfer",
+            status="failed",
+            message=f"Socket transfer failed for {filename}: {e}",
+            file_id=file_id,
+            experiment_id=exp_id,
+            error=str(e)
+        )
+        return jsonify({"error": f"Socket transmission failure: {e}"}), 500
+
+    duration_ms = round((time.time() - t0) * 1000.0, 2)
+    end_iso = datetime.now().isoformat()
+
+    task_info = GENERATION_TASKS.get(exp_id, {})
+    received_sha256 = task_info.get("file_sha256") or original_sha256
+    integrity_verified = (received_sha256 == original_sha256)
+
+    # 5. Extract Features & Classify
+    feat_before = extract_and_save_features(exp_id)
+    class_before = classify_traffic(feat_before)
+
+    # 6. Save Analysis Result (`analysis_results.json`)
+    analysis_id = f"ANALYSIS-{start_time.strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
+    analysis_record = {
+        "analysis_id": analysis_id,
+        "file_id": file_id,
+        "experiment_id": exp_id,
+        "stage": "before",
+        "transport_protocol": protocol,
+        "packet_count": feat_before.get("packet_count", 0),
+        "total_bytes": feat_before.get("total_bytes", 0),
+        "mean_size": feat_before.get("mean_size", 0.0),
+        "min_size": feat_before.get("min_size", 0),
+        "max_size": feat_before.get("max_size", 0),
+        "size_std_dev": feat_before.get("size_std_dev", 0.0),
+        "mean_ipt_ms": feat_before.get("mean_ipt_ms", 0.0),
+        "ipt_std_dev_ms": feat_before.get("ipt_std_dev_ms", 0.0),
+        "jitter_ms": feat_before.get("jitter_ms", 0.0),
+        "throughput_kbps": feat_before.get("throughput_kbps", 0.0),
+        "duration_sec": feat_before.get("duration_sec", 0.0),
+        "mean_burst_length": feat_before.get("mean_burst_length", 0.0),
+        "burst_count": feat_before.get("burst_count", 0),
+        "classifier_result": class_before,
+        "classifier_config_version": "1.0.0",
+        "analysis_timestamp": end_iso,
+        "execution_status": "completed",
+        "errors": None
+    }
+    save_analysis_result(analysis_record)
+
+    # 7. Save Transferred File Record (`transferred_files.json`)
+    file_record = {
+        "file_id": file_id,
+        "original_filename": filename,
+        "sanitized_filename": sanitize_filename(filename),
+        "extension": ext,
+        "mime_type": detect_mime_type(filename),
+        "size_bytes": len(raw_bytes),
+        "sha256": original_sha256,
+        "received_sha256": received_sha256,
+        "integrity_verified": integrity_verified,
+        "transfer_protocol": protocol,
+        "source_label": "Client (127.0.0.1)",
+        "dest_label": "Server (127.0.0.1)",
+        "storage_path": str(storage_path),
+        "transfer_started_at": start_iso,
+        "transfer_completed_at": end_iso,
+        "duration_ms": duration_ms,
+        "status": "completed" if integrity_verified else "interrupted",
+        "experiment_id": exp_id,
+        "analysis_id": analysis_id,
+        "created_at": start_iso
+    }
+    save_transferred_file(file_record)
+
+    # 8. Save Experiment Record (`experiments.json`)
+    exp_record = {
+        "id": exp_id,
+        "experiment_id": exp_id,
+        "file_id": file_id,
+        "analysis_before_id": analysis_id,
+        "created_at": start_iso,
+        "updated_at": end_iso,
+        "status": "completed",
+        "config": {
+            "protocol": protocol,
+            "packet_count": feat_before.get("packet_count", 0),
+            "packet_size": packet_size,
+            "interval_ms": interval_ms,
+            "payload_mode": "file",
+            "filename": filename
+        },
+        "features_before": feat_before,
+        "classification_before": class_before,
+        "original_checksum": original_sha256,
+        "content_integrity_verified": integrity_verified
+    }
+    save_experiment(exp_record)
+
+    return jsonify({
+        "status": "success",
+        "file_id": file_id,
+        "file": file_record,
+        "experiment_id": exp_id,
+        "analysis_id": analysis_id,
+        "analysis": analysis_record,
+        "filename": filename,
+        "size_bytes": len(raw_bytes),
+        "sha256": original_sha256,
+        "received_sha256": received_sha256,
+        "integrity_verified": integrity_verified,
+        "duration_ms": duration_ms,
+        "protocol": protocol,
+        "packets_transmitted": feat_before.get("packet_count", 0),
+        "classification": class_before
+    }), 200
+
+
+@app.route("/api/files", methods=["GET"])
+def api_files_list():
+    """List transferred files with pagination, search, and protocol filtering."""
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 20))
+    search = request.args.get("search")
+    protocol = request.args.get("protocol")
+    status = request.args.get("status")
+
+    res = list_transferred_files(page=page, per_page=per_page, search=search, protocol=protocol, status=status)
+    return jsonify(res)
+
+
+@app.route("/api/files/<file_id>", methods=["GET"])
+def api_files_get(file_id):
+    """Retrieve metadata for a single transferred file."""
+    validate_id_format(file_id, "File ID")
+    rec = get_transferred_file(file_id)
+    if not rec:
+        return jsonify({"error": f"File {file_id} not found."}), 404
+
+    # Attach analysis and experiment if linked
+    analysis = None
+    if rec.get("analysis_id"):
+        analysis = get_analysis_result(rec["analysis_id"])
+    exp = None
+    if rec.get("experiment_id"):
+        exp = get_experiment(rec["experiment_id"])
+
+    response_data = dict(rec)
+    response_data["analysis"] = analysis
+    response_data["experiment"] = exp
+    return jsonify(response_data)
+
+
+@app.route("/api/files/<file_id>/download", methods=["GET"])
+def api_files_download(file_id):
+    """Securely download authorized stored binary file."""
+    validate_id_format(file_id, "File ID")
+    rec = get_transferred_file(file_id)
+    if not rec:
+        return jsonify({"error": f"File {file_id} not found."}), 404
+
+    storage_path = Path(rec.get("storage_path", ""))
+    if not storage_path.is_absolute():
+        storage_path = (BASE_DIR / storage_path).resolve()
+
+    if not storage_path.exists() or not storage_path.is_file():
+        return jsonify({"error": "Stored file binary does not exist on disk."}), 404
+
+    # Path traversal validation
+    if not str(storage_path.resolve()).startswith(str(UPLOADS_DIR.resolve())):
+        return jsonify({"error": "Access denied: Target path outside authorized storage directory."}), 403
+
+    safe_name = rec.get("original_filename", "download.bin")
+    return send_from_directory(
+        str(storage_path.parent),
+        storage_path.name,
+        as_attachment=True,
+        download_name=safe_name
+    )
+
+
+@app.route("/api/files/<file_id>", methods=["DELETE"])
+def api_files_delete(file_id):
+    """Delete transferred file record and stored binary file."""
+    validate_id_format(file_id, "File ID")
+    success = delete_transferred_file(file_id)
+    if success:
+        return jsonify({"status": "deleted", "file_id": file_id})
+    return jsonify({"error": f"File {file_id} not found."}), 404
+
+
+# --------------------------------------------------------------------------
+# Analysis Results APIs
+# --------------------------------------------------------------------------
+@app.route("/api/analysis", methods=["GET"])
+def api_analysis_list():
+    """List analysis results with pagination."""
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 20))
+    search = request.args.get("search")
+    experiment_id = request.args.get("experiment_id")
+
+    res = list_analysis_results(page=page, per_page=per_page, search=search, experiment_id=experiment_id)
+    return jsonify(res)
+
+
+@app.route("/api/analysis/<analysis_id>", methods=["GET"])
+def api_analysis_get(analysis_id):
+    """Retrieve specific analysis result record."""
+    validate_id_format(analysis_id, "Analysis ID")
+    res = get_analysis_result(analysis_id)
+    if not res:
+        return jsonify({"error": f"Analysis {analysis_id} not found."}), 404
+    return jsonify(res)
+
+
+@app.route("/api/files/<file_id>/analysis", methods=["GET"])
+def api_file_analysis_get(file_id):
+    """Retrieve analysis results associated with a given file."""
+    validate_id_format(file_id, "File ID")
+    rec = get_transferred_file(file_id)
+    if not rec:
+        return jsonify({"error": f"File {file_id} not found."}), 404
+
+    analysis_id = rec.get("analysis_id")
+    if analysis_id:
+        res = get_analysis_result(analysis_id)
+        if res:
+            res_dict = dict(res)
+            res_dict["analyses"] = [res]
+            return jsonify(res_dict)
+
+    exp_id = rec.get("experiment_id")
+    if exp_id:
+        res = get_analysis_by_experiment(exp_id, stage="before")
+        if res:
+            res_dict = dict(res)
+            res_dict["analyses"] = [res]
+            return jsonify(res_dict)
+
+    return jsonify({"error": "No analysis record found for this file.", "analyses": []}), 404
+
+
+# --------------------------------------------------------------------------
+# Laboratory Details & Logs APIs
+# --------------------------------------------------------------------------
+@app.route("/api/lab/details", methods=["GET", "PUT"])
+def api_lab_details():
+    """Retrieve or update laboratory details and configuration."""
+    if request.method == "GET":
+        return jsonify(get_lab_details())
+    else:
+        data = request.get_json(silent=True) or {}
+        if data.get("reset", False):
+            return jsonify({"status": "reset", "lab_details": reset_lab_details()})
+        updated = update_lab_details(data)
+        return jsonify({"status": "updated", "lab_details": updated})
+
+
+@app.route("/api/logs", methods=["GET"])
+def api_logs_list():
+    """Retrieve paginated transfer logs and audit trail."""
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 50))
+    search = request.args.get("search")
+    event_type = request.args.get("event_type")
+    status = request.args.get("status")
+
+    res = list_transfer_logs(page=page, per_page=per_page, search=search, event_type=event_type, status=status)
+    return jsonify(res)
+
+
+# --------------------------------------------------------------------------
+# Existing Traffic Generation, Mimicry, and Experiments APIs
+# --------------------------------------------------------------------------
 @app.route("/api/text/preview", methods=["POST"])
 def api_text_preview():
     """Generate live preview of text chunk fragmentation."""
@@ -240,14 +704,12 @@ def api_traffic_generate():
     """Launch real socket traffic generation on 127.0.0.1 loopback."""
     params = request.get_json(silent=True) or {}
 
-    # Destination Safety Guard: Reject any attempt to target external or remote networks
     dest_host = params.get("host") or params.get("dest") or params.get("target_ip")
     if dest_host and not is_loopback(dest_host):
         return jsonify({
             "error": "Safety violation: External socket destinations are prohibited. Transmissions are strictly confined to 127.0.0.1."
         }), 400
 
-    # Validate parameters
     proto = str(params.get("protocol", "TCP")).upper()
     if proto not in ("TCP", "UDP"):
         return jsonify({"error": "Protocol must be 'TCP' or 'UDP'."}), 400
@@ -271,7 +733,7 @@ def api_traffic_generate():
         return jsonify({"error": "Invalid payload_pattern."}), 400
 
     payload_mode = params.get("payload_mode", "pattern")
-    if payload_mode not in ("pattern", "custom_text"):
+    if payload_mode not in ("pattern", "custom_text", "file"):
         return jsonify({"error": "Invalid payload_mode."}), 400
 
     custom_text = params.get("custom_text", "")
@@ -280,8 +742,32 @@ def api_traffic_generate():
             validate_text(custom_text)
         except Exception as e:
             return jsonify({"error": str(e)}), 400
+    elif payload_mode == "file":
+        raw_file_bytes = None
+        filename = params.get("filename", "transfer.bin")
+        if "file_bytes_base64" in params and params["file_bytes_base64"]:
+            try:
+                raw_file_bytes = base64.b64decode(params["file_bytes_base64"])
+            except Exception:
+                return jsonify({"error": "Invalid base64 payload in file_bytes_base64."}), 400
+        elif "file_bytes" in params and isinstance(params["file_bytes"], (bytes, bytearray)):
+            raw_file_bytes = bytes(params["file_bytes"])
+        elif "content_text" in params and params["content_text"]:
+            raw_file_bytes = params["content_text"].encode("utf-8")
 
-    # Concurrency limit check
+        if not raw_file_bytes or len(raw_file_bytes) == 0:
+            return jsonify({"error": "File transfer mode requires non-empty binary file content."}), 400
+
+        try:
+            val = validate_file_content(filename, raw_file_bytes, max_bytes=MAX_FILE_SIZE_BYTES)
+            params["filename"] = val["sanitized_filename"]
+        except ValueError as ve:
+            return jsonify({"error": str(ve)}), 400
+
+        params["file_bytes"] = raw_file_bytes
+        params["sent_sha256"] = params.get("expected_sha256") or compute_sha256(raw_file_bytes)
+        params["file_size"] = len(raw_file_bytes)
+
     with TASKS_LOCK:
         active_count = sum(1 for t in GENERATION_TASKS.values() if t.get("status") == "running")
     if active_count >= MAX_ACTIVE_EXPERIMENTS:
@@ -292,6 +778,13 @@ def api_traffic_generate():
     try:
         gen = TrafficGenerator()
         exp_id = gen.run_generation_async(params)
+        log_transfer_event(
+            event_type="traffic_generation",
+            status="started",
+            message=f"Traffic stream ({proto}, {params.get('target_count', packet_count)} packets, mode={payload_mode}) initiated over 127.0.0.1.",
+            experiment_id=exp_id,
+            details={"protocol": proto, "payload_mode": payload_mode, "filename": params.get("filename")}
+        )
         return jsonify({
             "experiment_id": exp_id,
             "status": "started",
@@ -301,10 +794,26 @@ def api_traffic_generate():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/traffic/<exp_id>/cancel", methods=["POST"])
+def api_traffic_cancel(exp_id):
+    """Abort an active transmission cleanly."""
+    validate_id_format(exp_id, "Experiment ID")
+    success = cancel_generation(exp_id)
+    if not success:
+        return jsonify({"error": f"Active task {exp_id} not found to cancel."}), 404
+    log_transfer_event(
+        event_type="transfer_cancel",
+        status="cancelled",
+        message=f"Transmission {exp_id} cancelled by user.",
+        experiment_id=exp_id
+    )
+    return jsonify({"status": "cancelled", "experiment_id": exp_id})
+
+
 @app.route("/api/traffic/<exp_id>/status", methods=["GET"])
 def api_traffic_status(exp_id):
     """Poll live progress and packet trace for active generation."""
-    validate_id_format(exp_id)
+    validate_id_format(exp_id, "Experiment ID")
     status = get_task_status(exp_id)
     if not status:
         csv_file = TRAFFIC_DIR / f"{exp_id}.csv"
@@ -321,7 +830,7 @@ def api_traffic_status(exp_id):
 @app.route("/api/features/<exp_id>", methods=["GET"])
 def api_features(exp_id):
     """Retrieve extracted features for baseline and mimicked traffic."""
-    validate_id_format(exp_id)
+    validate_id_format(exp_id, "Experiment ID")
     before = load_saved_features(exp_id)
     if not before:
         try:
@@ -340,7 +849,7 @@ def api_features(exp_id):
 @app.route("/api/classify/<exp_id>", methods=["POST"])
 def api_classify(exp_id):
     """Run DPI heuristic classification for baseline or mimicked stage."""
-    validate_id_format(exp_id)
+    validate_id_format(exp_id, "Experiment ID")
     stage = request.args.get("stage", "before").lower()
     if stage not in ("before", "after"):
         return jsonify({"error": "stage parameter must be 'before' or 'after'."}), 400
@@ -354,8 +863,32 @@ def api_classify(exp_id):
             return jsonify({"error": f"Features for stage '{stage}' not found: {e}"}), 404
 
     classification = classify_traffic(features)
+
+    # Automatically persist analysis result to analysis_results.json
+    analysis_id = f"ANALYSIS-{int(time.time()*1000)}-{os.urandom(2).hex()}"
+    analysis_record = {
+        "analysis_id": analysis_id,
+        "experiment_id": exp_id,
+        "stage": stage,
+        "transport_protocol": features.get("protocol", "TCP"),
+        "packet_count": features.get("packet_count", 0),
+        "total_bytes": features.get("total_bytes", 0),
+        "mean_size": features.get("mean_size", 0.0),
+        "min_size": features.get("min_size", 0),
+        "max_size": features.get("max_size", 0),
+        "mean_ipt_ms": features.get("mean_ipt_ms", 0.0),
+        "jitter_ms": features.get("jitter_ms", 0.0),
+        "throughput_kbps": features.get("throughput_kbps", 0.0),
+        "classifier_result": classification,
+        "classifier_config_version": "1.0.0",
+        "analysis_timestamp": datetime.now().isoformat(),
+        "execution_status": "completed"
+    }
+    save_analysis_result(analysis_record)
+
     return jsonify({
         "experiment_id": exp_id,
+        "analysis_id": analysis_id,
         "stage": stage,
         "classification": classification
     })
@@ -368,7 +901,7 @@ def api_mimicry_apply():
     exp_id = data.get("id")
     if not exp_id:
         return jsonify({"error": "Missing experiment id"}), 400
-    validate_id_format(exp_id)
+    validate_id_format(exp_id, "Experiment ID")
 
     target_profile = data.get("target_profile", "voip_call")
     if target_profile not in get_profiles():
@@ -409,9 +942,26 @@ def api_mimicry_apply():
             overhead=mimic_res["overhead"]
         )
 
+        # Save transformed analysis result
+        analysis_after_id = f"ANALYSIS-{int(time.time()*1000)}-after"
+        save_analysis_result({
+            "analysis_id": analysis_after_id,
+            "experiment_id": exp_id,
+            "stage": "after",
+            "transport_protocol": after_feat.get("protocol", "TCP"),
+            "packet_count": after_feat.get("packet_count", 0),
+            "total_bytes": after_feat.get("total_bytes", 0),
+            "mean_size": after_feat.get("mean_size", 0.0),
+            "mean_ipt_ms": after_feat.get("mean_ipt_ms", 0.0),
+            "jitter_ms": after_feat.get("jitter_ms", 0.0),
+            "classifier_result": after_class,
+            "analysis_timestamp": datetime.now().isoformat()
+        })
+
         exp_record = get_experiment(exp_id) or {"id": exp_id, "config": {}}
         exp_record.update({
             "id": exp_id,
+            "analysis_after_id": analysis_after_id,
             "features_before": before_feat,
             "classification_before": before_class,
             "mimicry_config": {
@@ -427,6 +977,14 @@ def api_mimicry_apply():
             "reassembled_text": mimic_res.get("reassembled_text")
         })
         save_experiment(exp_record)
+
+        log_transfer_event(
+            event_type="mimicry",
+            status="completed",
+            message=f"Applied mimicry for target '{get_profile(target_profile)['name']}'. Verdict: {comparison.get('status_banner')}.",
+            experiment_id=exp_id,
+            details={"target_profile": target_profile, "fooled": comparison.get("fooled")}
+        )
 
         return jsonify({
             "status": "success",
@@ -444,7 +1002,7 @@ def api_mimicry_apply():
 @app.route("/api/compare/<exp_id>", methods=["GET"])
 def api_compare(exp_id):
     """Retrieve full comparative analysis between before and after."""
-    validate_id_format(exp_id)
+    validate_id_format(exp_id, "Experiment ID")
     exp = get_experiment(exp_id)
     if exp and "comparison" in exp:
         return jsonify(exp["comparison"])
@@ -477,7 +1035,7 @@ def api_experiments_list():
 @app.route("/api/experiments/<exp_id>", methods=["GET"])
 def api_experiments_get(exp_id):
     """Retrieve complete record for a single experiment."""
-    validate_id_format(exp_id)
+    validate_id_format(exp_id, "Experiment ID")
     record = get_experiment(exp_id)
     if not record:
         return jsonify({"error": f"Experiment {exp_id} not found."}), 404
@@ -487,7 +1045,7 @@ def api_experiments_get(exp_id):
 @app.route("/api/experiments/<exp_id>", methods=["DELETE"])
 def api_experiments_delete(exp_id):
     """Delete an experiment and its files."""
-    validate_id_format(exp_id)
+    validate_id_format(exp_id, "Experiment ID")
     success = delete_experiment(exp_id)
     if success:
         return jsonify({"status": "deleted", "id": exp_id})
@@ -497,7 +1055,7 @@ def api_experiments_delete(exp_id):
 @app.route("/api/export/<exp_id>", methods=["GET"])
 def api_export(exp_id):
     """Export experiment report in CSV, JSON, or printable HTML."""
-    validate_id_format(exp_id)
+    validate_id_format(exp_id, "Experiment ID")
     fmt = request.args.get("format", "json").lower()
     if fmt not in ("json", "csv", "html"):
         return jsonify({"error": "format must be json, csv, or html"}), 400
@@ -695,9 +1253,9 @@ def _demo_pipeline_worker(run_id, source_type, custom_text, target_profile, prot
             overhead=mimic_res["overhead"]
         )
 
-        # Persist full experiment
         exp_record = {
             "id": exp_id,
+            "experiment_id": exp_id,
             "config": params,
             "features_before": feat_before,
             "classification_before": class_before,

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transferred Files & Socket Storage - Protocol Mimicry Engine</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+  <div class="app-container">
+    <aside id="appSidebar" class="sidebar"></aside>
+
+    <main class="main-content">
+      <header id="appTopbar" class="topbar"></header>
+
+      <div class="content-body fade-in">
+        <!-- Page Title & Header Actions -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 style="font-size:20px; font-weight:800; display:flex; align-items:center; gap:8px;">
+              <span>Transferred Files & Persistent Storage</span>
+              <span class="badge badge-blue">JSON Persistent Store</span>
+            </h2>
+            <p style="color:var(--text-muted); font-size:13px;">
+              Real file transfers over TCP and UDP loopback sockets with SHA-256 integrity verification, binary storage, and feature extraction.
+            </p>
+          </div>
+          <button id="btnOpenTransferModal" class="btn btn-primary">
+            + Transmit New File
+          </button>
+        </div>
+
+        <!-- Metric KPI Cards -->
+        <div class="grid grid-4" style="margin-bottom:20px;">
+          <div class="card stat-card">
+            <span class="stat-label">Total Files Transferred</span>
+            <span class="stat-value" id="statTotalFiles">0</span>
+            <span class="stat-sub">Persisted in transferred_files.json</span>
+          </div>
+          <div class="card stat-card">
+            <span class="stat-label">Total Volume Transmitted</span>
+            <span class="stat-value" id="statTotalBytes">0 B</span>
+            <span class="stat-sub">Aggregated socket transfer volume</span>
+          </div>
+          <div class="card stat-card">
+            <span class="stat-label">Integrity Verification</span>
+            <span class="stat-value" id="statIntegrityRate" style="color:var(--success);">100%</span>
+            <span class="stat-sub">SHA-256 match rate</span>
+          </div>
+          <div class="card stat-card">
+            <span class="stat-label">Active Transports</span>
+            <span class="stat-value" id="statProtocols">TCP / UDP</span>
+            <span class="stat-sub">Strict loopback 127.0.0.1</span>
+          </div>
+        </div>
+
+        <!-- Transmission Execution Card -->
+        <div class="card" id="transferCard" style="margin-bottom:20px; border-left:4px solid var(--primary);">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 class="card-title" style="margin:0; font-size:16px;">Initiate Real Socket File Transmission</h3>
+            <span class="badge badge-gray" style="font-size:11px;">Max 10 MB | 127.0.0.1 Loopback</span>
+          </div>
+          <div style="padding:16px;">
+            <form id="fileTransferForm">
+              <div class="grid grid-2" style="gap:16px; margin-bottom:16px;">
+                <div>
+                  <label class="form-label">Select File to Transmit</label>
+                  <input type="file" id="fileInput" class="form-input" style="padding:7px 10px;">
+                  <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+                    Supported: .txt, .json, .csv, .bin, .pdf, .log, .png, .jpg (or enter text below)
+                  </div>
+                </div>
+
+                <div>
+                  <label class="form-label">Or Quick Sample Payload</label>
+                  <div style="display:flex; gap:8px;">
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnSampleText">Sample Text</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnSampleVoIP">VoIP Frames</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btnSampleBinary">Binary Data</button>
+                  </div>
+                </div>
+              </div>
+
+              <div id="textPayloadContainer" style="margin-bottom:16px;">
+                <label class="form-label">Payload Content (Inline Text / Binary Preview)</label>
+                <textarea id="fileContentText" class="form-input" rows="3" placeholder="Enter payload content or load a file above..."></textarea>
+              </div>
+
+              <div class="grid grid-4" style="gap:14px; margin-bottom:16px;">
+                <div>
+                  <label class="form-label">Transport Protocol</label>
+                  <select id="protocolSelect" class="form-select">
+                    <option value="TCP" selected>TCP (Stream Socket)</option>
+                    <option value="UDP">UDP (Datagram Socket)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label">Packet / Chunk Size (Bytes)</label>
+                  <input type="number" id="packetSizeInput" class="form-input" value="128" min="32" max="1460">
+                </div>
+                <div>
+                  <label class="form-label">Inter-Packet Delay (ms)</label>
+                  <input type="number" id="intervalMsInput" class="form-input" value="2.0" min="0.1" max="100.0" step="0.5">
+                </div>
+                <div style="display:flex; align-items:flex-end;">
+                  <button type="submit" id="btnStartTransfer" class="btn btn-primary" style="width:100%;">
+                    <span>Transmit over Sockets</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            <!-- Live Progress / Result Banner -->
+            <div id="transferResultBanner" style="display:none; margin-top:16px;" class="card" style="padding:14px; background:var(--bg-card-subtle);">
+              <div id="transferResultContent"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter & Search Controls -->
+        <div class="card" style="padding:14px; margin-bottom:18px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div style="flex:1; min-width:260px;">
+              <input type="text" id="searchInput" class="form-input" placeholder="Search by filename, file ID, extension, or SHA-256...">
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <select id="filterProtocol" class="form-select" style="width:130px;">
+                <option value="">All Protocols</option>
+                <option value="TCP">TCP Only</option>
+                <option value="UDP">UDP Only</option>
+              </select>
+              <select id="filterStatus" class="form-select" style="width:130px;">
+                <option value="">All Statuses</option>
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+              </select>
+              <button id="btnRefresh" class="btn btn-secondary btn-sm" title="Refresh records">
+                ↻ Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transferred Files Table -->
+        <div class="card">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>File ID</th>
+                  <th>Original Filename</th>
+                  <th>Size</th>
+                  <th>Protocol</th>
+                  <th>SHA-256 Checksum</th>
+                  <th>Integrity</th>
+                  <th>Timestamp</th>
+                  <th style="min-width:180px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="filesTableBody">
+                <tr><td colspan="8" style="text-align:center; padding:24px;">Loading transferred files...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Pagination -->
+          <div id="paginationContainer" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-top:1px solid var(--border);">
+            <span style="font-size:12px; color:var(--text-muted);" id="pageInfo">Showing 0 of 0 records</span>
+            <div style="display:flex; gap:6px;">
+              <button id="btnPrevPage" class="btn btn-secondary btn-sm" disabled>« Previous</button>
+              <button id="btnNextPage" class="btn btn-secondary btn-sm" disabled>Next »</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <footer id="appFooter" class="app-footer"></footer>
+    </main>
+  </div>
+
+  <!-- Detail Modal -->
+  <div id="fileDetailModal" class="modal-backdrop" style="display:none;">
+    <div class="modal-card" style="max-width:680px; max-height:90vh; overflow-y:auto;">
+      <div class="modal-header">
+        <h3 id="modalFileTitle" style="margin:0; font-size:18px;">File Transfer & Analysis Details</h3>
+        <button id="btnCloseModal" class="btn-icon">✕</button>
+      </div>
+      <div id="modalBody" class="modal-body" style="padding:16px;">
+        <!-- Dynamic Content -->
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/files.js"></script>
+</body>
+</html>

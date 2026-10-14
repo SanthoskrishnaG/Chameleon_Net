@@ -134,6 +134,20 @@ export const API = {
     } catch (e) {
       handleNetworkError(e, fullUrl);
     }
+  },
+
+  async upload(path, formData) {
+    const fullUrl = resolveUrl(path);
+    try {
+      const res = await fetch(fullUrl, {
+        method: "POST",
+        headers: getHeaders(),
+        body: formData
+      });
+      return await handleResponse(res, fullUrl);
+    } catch (e) {
+      handleNetworkError(e, fullUrl);
+    }
   }
 };
 

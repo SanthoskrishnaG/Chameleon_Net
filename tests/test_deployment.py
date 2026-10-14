@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backend.config import is_loopback, get_allowed_origins, is_origin_allowed, SQLITE_DB_PATH
+from backend.config import is_loopback, get_allowed_origins, is_origin_allowed, STORAGE_DIR, EXPERIMENTS_PATH
 from backend.app import app
 from backend.result_store import get_experiment, list_experiments
 

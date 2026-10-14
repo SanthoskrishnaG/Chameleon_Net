@@ -1,4 +1,4 @@
-﻿services:
+services:
   - type: web
     name: protocol-mimicry-engine
     runtime: python
@@ -16,8 +16,10 @@
         value: "true"
       - key: DATA_DIR
         value: /var/data
-      - key: SQLITE_DB_PATH
-        value: /var/data/experiments.db
+      - key: STORAGE_DIR
+        value: /var/data
+      - key: UPLOADS_DIR
+        value: /var/data/uploads
       - key: ALLOWED_ORIGINS
         sync: false
         value: "https://your-project.vercel.app"
