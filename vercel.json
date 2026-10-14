@@ -1,0 +1,21 @@
+﻿{
+  "": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/", "destination": "/web/index.html" },
+    { "source": "/dashboard", "destination": "/web/dashboard.html" },
+    { "source": "/generator", "destination": "/web/generator.html" },
+    { "source": "/features", "destination": "/web/features.html" },
+    { "source": "/classifier", "destination": "/web/classifier.html" },
+    { "source": "/mimicry", "destination": "/web/mimicry.html" },
+    { "source": "/comparison", "destination": "/web/comparison.html" },
+    { "source": "/results", "destination": "/web/results.html" },
+    { "source": "/settings", "destination": "/web/settings.html" },
+    { "source": "/demo", "destination": "/web/demo.html" },
+    { "source": "/css/(.*)", "destination": "/web/css/" },
+    { "source": "/js/(.*)", "destination": "/web/js/" },
+    { "source": "/(.*)", "destination": "/web/" }
+  ]
+}

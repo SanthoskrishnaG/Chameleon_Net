@@ -93,8 +93,8 @@ function renderResultsTable(records) {
         <td>
           <div style="display:flex; gap:6px;">
             <a href="comparison.html?id=${r.id}" class="btn btn-secondary btn-sm">Inspect</a>
-            <a target="_blank" href="/api/export/${r.id}?format=html" class="btn btn-secondary btn-sm" title="Printable Report">HTML</a>
-            <a href="/api/export/${r.id}?format=csv" class="btn btn-secondary btn-sm" title="Export CSV">CSV</a>
+            <a target="_blank" href="${API.url(`/api/export/${r.id}?format=html`)}" class="btn btn-secondary btn-sm" title="Printable Report">HTML</a>
+            <a href="${API.url(`/api/export/${r.id}?format=csv`)}" class="btn btn-secondary btn-sm" title="Export CSV">CSV</a>
             <button class="btn btn-danger btn-sm btn-delete" data-id="${r.id}" title="Delete">✕</button>
           </div>
         </td>

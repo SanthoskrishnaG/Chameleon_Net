@@ -1,0 +1,29 @@
+﻿services:
+  - type: web
+    name: protocol-mimicry-engine
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn backend.app:app --bind 0.0.0.0: --workers 1 --threads 4 --timeout 120
+    healthCheckPath: /api/health
+    disk:
+      name: mimicry-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DEPLOYMENT_MODE
+        value: "true"
+      - key: DATA_DIR
+        value: /var/data
+      - key: SQLITE_DB_PATH
+        value: /var/data/experiments.db
+      - key: ALLOWED_ORIGINS
+        sync: false
+        value: "https://your-project.vercel.app"
+      - key: ALLOW_VERCEL_PREVIEWS
+        value: "true"
+      - key: STRICT_LOCAL_IP_GUARD
+        value: "false"
+      - key: API_KEY
+        generateValue: true

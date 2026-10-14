@@ -1,0 +1,45 @@
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pytest_cache/
+.coverage
+htmlcov/
+
+# Local Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+
+# Mutable Experiment Data (Prevent committing test runs to Git)
+data/traffic/*.csv
+data/features/*.json
+data/experiments/*.json
+data/*.db
+data/*.sqlite3
+data/*.sqlite
+results/*.csv
+results/*.html
+results/*.json
+
+# Keep directory structure with .gitkeep
+!data/traffic/.gitkeep
+!data/features/.gitkeep
+!data/experiments/.gitkeep
+!results/.gitkeep
+
+# IDE & Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Artifacts
+.DS_Store
+Thumbs.db

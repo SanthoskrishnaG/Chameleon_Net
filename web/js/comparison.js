@@ -81,8 +81,10 @@ function renderComparisonView(c) {
   renderOverlayBarChart(c.deltas || {});
 
   // Export Links
-  document.getElementById("btnExportReport").href = `/api/export/${currentExpId}?format=html`;
-  document.getElementById("btnExportCSV").href = `/api/export/${currentExpId}?format=csv`;
+  const btnReport = document.getElementById("btnExportReport");
+  if (btnReport) btnReport.href = API.url(`/api/export/${currentExpId}?format=html`);
+  const btnCSV = document.getElementById("btnExportCSV");
+  if (btnCSV) btnCSV.href = API.url(`/api/export/${currentExpId}?format=csv`);
 }
 
 function renderDeltaTable(deltas) {

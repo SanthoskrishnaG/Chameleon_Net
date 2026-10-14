@@ -1,10 +1,47 @@
-import requests
+import sys
 import time
 import json
+import threading
+from pathlib import Path
+
+# Add project root to sys.path
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import requests
+from backend.app import app
 
 BASE = "http://127.0.0.1:5000"
 
+
+def ensure_server_running():
+    """Ensure a server is listening on port 5000, launching one in a daemon thread if needed."""
+    try:
+        r = requests.get(f"{BASE}/api/health", timeout=0.8)
+        if r.status_code == 200:
+            return
+    except Exception:
+        pass
+
+    # Launch server in background thread
+    print("[*] Starting local Flask engine on 127.0.0.1:5000 for scenario verification...")
+    t = threading.Thread(target=lambda: app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False), daemon=True)
+    t.start()
+    for _ in range(30):
+        time.sleep(0.1)
+        try:
+            r = requests.get(f"{BASE}/api/health", timeout=0.5)
+            if r.status_code == 200:
+                print("[*] Engine server listening and ready.")
+                return
+        except Exception:
+            pass
+
+
 def test_pipeline():
+    ensure_server_running()
+
     print("[1] Testing Health Endpoint:")
     h = requests.get(f"{BASE}/api/health").json()
     print(f"    Status: {h['status']} | Loopback Only: {h['loopback_only']}")
@@ -74,6 +111,7 @@ def test_pipeline():
     print("    JSON Record Exported")
 
     print("\n[SUCCESS] ALL LABORATORY CRITERIA VERIFIED 100% WORKING!\n")
+
 
 if __name__ == "__main__":
     test_pipeline()

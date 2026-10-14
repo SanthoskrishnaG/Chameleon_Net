@@ -1,12 +1,15 @@
 """
 Flask REST API and Static Server for Protocol Mimicry Engine.
-Enforces loopback-only safety guard on all endpoints and routes.
+Provides deployment-safe security, CORS control, input validation, and loopback safety.
+Compatible with Vercel frontend and persistent Python hosting (Render, Railway, VPS).
 """
 
 import os
+import re
 import json
 import time
 import uuid
+import logging
 import threading
 from pathlib import Path
 from datetime import datetime
@@ -17,11 +20,14 @@ from flask_cors import CORS
 
 from backend.config import (
     BASE_DIR, WEB_DIR, TRAFFIC_DIR, FEATURES_DIR, EXPERIMENTS_DIR,
-    is_loopback, load_classifier_config, save_classifier_config, reset_classifier_config
+    PORT, HOST, API_KEY, STRICT_LOCAL_IP_GUARD, IS_DEPLOYMENT,
+    MAX_ACTIVE_EXPERIMENTS, MAX_PACKET_COUNT, MAX_PACKET_SIZE, MAX_TEXT_LENGTH,
+    is_loopback, is_origin_allowed, get_allowed_origins,
+    load_classifier_config, save_classifier_config, reset_classifier_config
 )
 from backend.profiles import get_profiles, get_profile_list, get_profile
 from backend.text_payload import preview_chunks, validate_text
-from backend.traffic_generator import TrafficGenerator, get_task_status
+from backend.traffic_generator import TrafficGenerator, get_task_status, GENERATION_TASKS, TASKS_LOCK
 from backend.feature_extractor import extract_and_save_features, load_saved_features
 from backend.dpi_classifier import classify_traffic
 from backend.mimicry_engine import MimicryEngine
@@ -30,43 +36,143 @@ from backend.result_store import (
     save_experiment, get_experiment, list_experiments, delete_experiment, export_experiment
 )
 
+# Initialize Flask Application
 app = Flask(__name__, static_folder=str(WEB_DIR), static_url_path="")
-CORS(app)
+app.config["JSON_SORT_KEYS"] = False
+
+# Enable CORS with configured origins (supports credentials=False for security)
+CORS(app, resources={r"/api/*": {"origins": "*" if not IS_DEPLOYMENT else get_allowed_origins()}}, supports_credentials=False)
 
 # Live Demo In-Memory State
 DEMO_RUNS: Dict[str, Dict[str, Any]] = {}
 DEMO_LOCK = threading.Lock()
 
+# Experiment ID Validation Pattern (alphanumeric, hyphens, underscores; prevents path traversal)
+EXP_ID_REGEX = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+START_TIME = datetime.now()
+
+
+def validate_id_format(identifier: str, field_name: str = "Experiment ID") -> None:
+    """Validate identifier syntax against directory traversal and shell injection."""
+    if not identifier or not EXP_ID_REGEX.match(identifier):
+        abort(400, description=f"{field_name} is invalid. Allowed: alphanumeric, hyphens, underscores (1-64 chars).")
+
 
 # --------------------------------------------------------------------------
-# Loopback Safety Guard Middleware
+# Security & Guard Middleware
 # --------------------------------------------------------------------------
 @app.before_request
-def loopback_guard():
-    """Strictly reject requests originating from non-loopback hosts."""
-    remote_ip = request.remote_addr
-    # When behind test client or local proxy, remote_ip could be 127.0.0.1 or ::1
-    if not is_loopback(remote_ip):
-        return jsonify({
-            "error": "Forbidden: Protocol Mimicry Engine is strictly confined to 127.0.0.1 loopback.",
-            "remote_addr": remote_ip
-        }), 403
+def security_guard():
+    """Deployment-safe security middleware."""
+    # 1. Fast path for CORS preflight
+    if request.method == "OPTIONS":
+        return "", 200
+
+    # 2. Strict Local IP Guard (enabled in standalone offline mode or via STRICT_LOCAL_IP_GUARD=true)
+    if STRICT_LOCAL_IP_GUARD:
+        remote_ip = request.remote_addr
+        if not is_loopback(remote_ip):
+            return jsonify({
+                "error": "Forbidden: Protocol Mimicry Engine is strictly confined to 127.0.0.1 loopback.",
+                "remote_addr": remote_ip
+            }), 403
+
+    # 3. Authentication for mutating endpoints when API_KEY is configured
+    if API_KEY and request.path.startswith("/api/") and request.method in ("POST", "PUT", "DELETE"):
+        # Exclude read-only preview from mandatory auth
+        if request.path != "/api/text/preview":
+            provided_key = (
+                request.headers.get("X-API-Key") or
+                request.headers.get("Authorization", "").replace("Bearer ", "").strip() or
+                request.args.get("api_key", "").strip()
+            )
+            if provided_key != API_KEY:
+                return jsonify({
+                    "error": "Unauthorized: Valid API key required for mutating operations.",
+                    "status_code": 401
+                }), 401
+
+
+@app.after_request
+def add_security_and_cors_headers(response):
+    """Enforce CORS dynamic headers and standard web security headers."""
+    origin = request.headers.get("Origin")
+    if origin and is_origin_allowed(origin):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-API-Key, Authorization"
+        response.headers["Access-Control-Max-Age"] = "86400"
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
 # --------------------------------------------------------------------------
-# Static Web Pages & Assets
+# Centralized Error Handlers (Clean JSON, never leak stack traces)
+# --------------------------------------------------------------------------
+@app.errorhandler(400)
+def handle_bad_request(e):
+    msg = e.description if hasattr(e, "description") else str(e)
+    return jsonify({"error": msg, "status_code": 400}), 400
+
+
+@app.errorhandler(401)
+def handle_unauthorized(e):
+    msg = e.description if hasattr(e, "description") else "Unauthorized"
+    return jsonify({"error": msg, "status_code": 401}), 401
+
+
+@app.errorhandler(403)
+def handle_forbidden(e):
+    msg = e.description if hasattr(e, "description") else "Forbidden"
+    return jsonify({"error": msg, "status_code": 403}), 403
+
+
+@app.errorhandler(404)
+def handle_not_found(e):
+    msg = e.description if hasattr(e, "description") else "Resource not found"
+    return jsonify({"error": msg, "status_code": 404}), 404
+
+
+@app.errorhandler(405)
+def handle_method_not_allowed(e):
+    return jsonify({"error": "HTTP method not allowed", "status_code": 405}), 405
+
+
+@app.errorhandler(429)
+def handle_rate_limit(e):
+    msg = e.description if hasattr(e, "description") else "Too many requests. Please wait."
+    return jsonify({"error": msg, "status_code": 429}), 429
+
+
+@app.errorhandler(500)
+def handle_internal_error(e):
+    logging.exception("Unhandled server exception: %s", e)
+    return jsonify({
+        "error": "Internal server error occurred during laboratory operation.",
+        "status_code": 500
+    }), 500
+
+
+# --------------------------------------------------------------------------
+# Static Web Pages & Assets (For standalone / local development)
 # --------------------------------------------------------------------------
 @app.route("/")
 def index():
-    return send_from_directory(WEB_DIR, "index.html")
+    if WEB_DIR.exists() and (WEB_DIR / "index.html").exists():
+        return send_from_directory(WEB_DIR, "index.html")
+    return jsonify({"message": "ChameleonNet Backend API Online", "health": "/api/health"})
 
 
 @app.route("/<path:path>")
 def serve_static(path):
+    if not WEB_DIR.exists():
+        abort(404)
     target = WEB_DIR / path
     if target.exists() and target.is_file():
         return send_from_directory(WEB_DIR, path)
-    # Check if html extension omitted
     html_target = WEB_DIR / f"{path}.html"
     if html_target.exists():
         return send_from_directory(WEB_DIR, f"{path}.html")
@@ -78,13 +184,26 @@ def serve_static(path):
 # --------------------------------------------------------------------------
 @app.route("/api/health", methods=["GET"])
 def api_health():
-    """Health check and engine status."""
+    """Health check, deployment state, and laboratory status."""
+    uptime_sec = round((datetime.now() - START_TIME).total_seconds(), 1)
     return jsonify({
         "status": "online",
-        "loopback_only": True,
         "engine": "Protocol Mimicry Engine Laboratory",
         "version": "1.0.0",
-        "timestamp": datetime.now().isoformat()
+        "uptime_seconds": uptime_sec,
+        "timestamp": datetime.now().isoformat(),
+        "deployment_mode": IS_DEPLOYMENT,
+        "loopback_only": True,
+        "storage": "sqlite+filesystem",
+        "auth_required": bool(API_KEY),
+        "capabilities": {
+            "real_tcp_sockets": True,
+            "real_udp_sockets": True,
+            "feature_extraction": True,
+            "heuristic_dpi_classifier": True,
+            "protocol_mimicry": True,
+            "text_preservation": True
+        }
     })
 
 
@@ -100,11 +219,14 @@ def api_profiles():
 @app.route("/api/text/preview", methods=["POST"])
 def api_text_preview():
     """Generate live preview of text chunk fragmentation."""
-    data = request.get_json() or {}
-    text = data.get("text", "")
+    data = request.get_json(silent=True) or {}
+    text = str(data.get("text", ""))
     packet_size = int(data.get("packet_size", 512))
     repeat_to_count = int(data.get("repeat_to_count", 0))
     pad_last = bool(data.get("pad_last", True))
+
+    if packet_size < 1 or packet_size > MAX_PACKET_SIZE:
+        return jsonify({"error": f"packet_size must be between 1 and {MAX_PACKET_SIZE} bytes."}), 400
 
     try:
         preview = preview_chunks(text, packet_size, repeat_to_count, pad_last)
@@ -116,15 +238,56 @@ def api_text_preview():
 @app.route("/api/traffic/generate", methods=["POST"])
 def api_traffic_generate():
     """Launch real socket traffic generation on 127.0.0.1 loopback."""
-    params = request.get_json() or {}
-    payload_mode = params.get("payload_mode", "pattern")
-    custom_text = params.get("custom_text", "")
+    params = request.get_json(silent=True) or {}
 
+    # Destination Safety Guard: Reject any attempt to target external or remote networks
+    dest_host = params.get("host") or params.get("dest") or params.get("target_ip")
+    if dest_host and not is_loopback(dest_host):
+        return jsonify({
+            "error": "Safety violation: External socket destinations are prohibited. Transmissions are strictly confined to 127.0.0.1."
+        }), 400
+
+    # Validate parameters
+    proto = str(params.get("protocol", "TCP")).upper()
+    if proto not in ("TCP", "UDP"):
+        return jsonify({"error": "Protocol must be 'TCP' or 'UDP'."}), 400
+
+    try:
+        packet_count = int(params.get("packet_count", 100))
+        packet_size = int(params.get("packet_size", 512))
+        interval_ms = float(params.get("interval_ms", 10))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid numerical parameters."}), 400
+
+    if packet_count < 1 or packet_count > MAX_PACKET_COUNT:
+        return jsonify({"error": f"packet_count must be between 1 and {MAX_PACKET_COUNT}."}), 400
+    if packet_size < 1 or packet_size > MAX_PACKET_SIZE:
+        return jsonify({"error": f"packet_size must be between 1 and {MAX_PACKET_SIZE} bytes."}), 400
+    if interval_ms < 0 or interval_ms > 10000:
+        return jsonify({"error": "interval_ms must be between 0 and 10000 ms."}), 400
+
+    payload_pattern = params.get("payload_pattern", "random")
+    if payload_pattern not in ("random", "zeros", "incrementing", "text-like"):
+        return jsonify({"error": "Invalid payload_pattern."}), 400
+
+    payload_mode = params.get("payload_mode", "pattern")
+    if payload_mode not in ("pattern", "custom_text"):
+        return jsonify({"error": "Invalid payload_mode."}), 400
+
+    custom_text = params.get("custom_text", "")
     if payload_mode == "custom_text":
         try:
             validate_text(custom_text)
         except Exception as e:
             return jsonify({"error": str(e)}), 400
+
+    # Concurrency limit check
+    with TASKS_LOCK:
+        active_count = sum(1 for t in GENERATION_TASKS.values() if t.get("status") == "running")
+    if active_count >= MAX_ACTIVE_EXPERIMENTS:
+        return jsonify({
+            "error": f"Maximum concurrent experiments ({MAX_ACTIVE_EXPERIMENTS}) active. Please wait for current transmission to finish."
+        }), 429
 
     try:
         gen = TrafficGenerator()
@@ -141,9 +304,9 @@ def api_traffic_generate():
 @app.route("/api/traffic/<exp_id>/status", methods=["GET"])
 def api_traffic_status(exp_id):
     """Poll live progress and packet trace for active generation."""
+    validate_id_format(exp_id)
     status = get_task_status(exp_id)
     if not status:
-        # Check if CSV exists on disk
         csv_file = TRAFFIC_DIR / f"{exp_id}.csv"
         if csv_file.exists():
             return jsonify({
@@ -158,6 +321,7 @@ def api_traffic_status(exp_id):
 @app.route("/api/features/<exp_id>", methods=["GET"])
 def api_features(exp_id):
     """Retrieve extracted features for baseline and mimicked traffic."""
+    validate_id_format(exp_id)
     before = load_saved_features(exp_id)
     if not before:
         try:
@@ -176,9 +340,12 @@ def api_features(exp_id):
 @app.route("/api/classify/<exp_id>", methods=["POST"])
 def api_classify(exp_id):
     """Run DPI heuristic classification for baseline or mimicked stage."""
+    validate_id_format(exp_id)
     stage = request.args.get("stage", "before").lower()
-    suffix = "_mimic" if stage == "after" else ""
+    if stage not in ("before", "after"):
+        return jsonify({"error": "stage parameter must be 'before' or 'after'."}), 400
 
+    suffix = "_mimic" if stage == "after" else ""
     features = load_saved_features(exp_id, suffix=suffix)
     if not features:
         try:
@@ -197,17 +364,24 @@ def api_classify(exp_id):
 @app.route("/api/mimicry/apply", methods=["POST"])
 def api_mimicry_apply():
     """Apply mimicry transformations and re-transmit over loopback sockets."""
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     exp_id = data.get("id")
+    if not exp_id:
+        return jsonify({"error": "Missing experiment id"}), 400
+    validate_id_format(exp_id)
+
     target_profile = data.get("target_profile", "voip_call")
+    if target_profile not in get_profiles():
+        return jsonify({"error": f"Target profile '{target_profile}' does not exist in catalog."}), 400
+
     toggles = data.get("toggles", {"padding": True, "timing": True, "burst": True})
     custom_jitter = data.get("custom_jitter_ms")
     custom_burst = data.get("custom_burst_len")
     transport_mode = data.get("transport_mode", "keep_original")
-    original_text = data.get("original_text")
+    if transport_mode not in ("keep_original", "convert_transport"):
+        return jsonify({"error": "transport_mode must be 'keep_original' or 'convert_transport'."}), 400
 
-    if not exp_id:
-        return jsonify({"error": "Missing experiment id"}), 400
+    original_text = data.get("original_text")
 
     try:
         engine = MimicryEngine(exp_id)
@@ -220,7 +394,6 @@ def api_mimicry_apply():
             original_text=original_text
         )
 
-        # Automatically classify both before and after
         before_feat = load_saved_features(exp_id)
         after_feat = mimic_res["transformed_features"]
 
@@ -236,7 +409,6 @@ def api_mimicry_apply():
             overhead=mimic_res["overhead"]
         )
 
-        # Update experiment store
         exp_record = get_experiment(exp_id) or {"id": exp_id, "config": {}}
         exp_record.update({
             "id": exp_id,
@@ -272,6 +444,7 @@ def api_mimicry_apply():
 @app.route("/api/compare/<exp_id>", methods=["GET"])
 def api_compare(exp_id):
     """Retrieve full comparative analysis between before and after."""
+    validate_id_format(exp_id)
     exp = get_experiment(exp_id)
     if exp and "comparison" in exp:
         return jsonify(exp["comparison"])
@@ -304,6 +477,7 @@ def api_experiments_list():
 @app.route("/api/experiments/<exp_id>", methods=["GET"])
 def api_experiments_get(exp_id):
     """Retrieve complete record for a single experiment."""
+    validate_id_format(exp_id)
     record = get_experiment(exp_id)
     if not record:
         return jsonify({"error": f"Experiment {exp_id} not found."}), 404
@@ -313,6 +487,7 @@ def api_experiments_get(exp_id):
 @app.route("/api/experiments/<exp_id>", methods=["DELETE"])
 def api_experiments_delete(exp_id):
     """Delete an experiment and its files."""
+    validate_id_format(exp_id)
     success = delete_experiment(exp_id)
     if success:
         return jsonify({"status": "deleted", "id": exp_id})
@@ -322,7 +497,11 @@ def api_experiments_delete(exp_id):
 @app.route("/api/export/<exp_id>", methods=["GET"])
 def api_export(exp_id):
     """Export experiment report in CSV, JSON, or printable HTML."""
-    fmt = request.args.get("format", "json")
+    validate_id_format(exp_id)
+    fmt = request.args.get("format", "json").lower()
+    if fmt not in ("json", "csv", "html"):
+        return jsonify({"error": "format must be json, csv, or html"}), 400
+
     try:
         content, mime_type, filename = export_experiment(exp_id, fmt)
         return Response(
@@ -340,7 +519,7 @@ def api_settings():
     if request.method == "GET":
         return jsonify(load_classifier_config())
     else:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         if data.get("reset", False):
             cfg = reset_classifier_config()
             return jsonify({"status": "reset", "config": cfg})
@@ -353,17 +532,14 @@ def api_settings():
 # --------------------------------------------------------------------------
 @app.route("/api/demo/run", methods=["POST"])
 def api_demo_run():
-    """
-    Launch fully real end-to-end automated pipeline walkthrough.
-    Supports source selection (random pattern or custom text) and target profile.
-    """
-    data = request.get_json() or {}
-    source_type = data.get("source_type", "random")  # "random" or "custom_text"
+    """Launch real end-to-end automated pipeline walkthrough."""
+    data = request.get_json(silent=True) or {}
+    source_type = data.get("source_type", "random")
     custom_text = data.get("custom_text", "Antigravity Protocol Mimicry Lab: Transmission active over loopback sockets.")
     target_profile = data.get("target_profile", "voip_call")
     protocol = data.get("protocol", "TCP")
-    packet_count = int(data.get("packet_count", 60))
-    speed = float(data.get("speed", 1.0))  # 1.0x or 2.0x
+    packet_count = min(int(data.get("packet_count", 60)), MAX_PACKET_COUNT)
+    speed = float(data.get("speed", 1.0))
     transport_mode = data.get("transport_mode", "convert_transport")
 
     run_id = f"DEMO-{int(time.time()*1000)}"
@@ -396,7 +572,8 @@ def api_demo_run():
 
 @app.route("/api/demo/<run_id>/events", methods=["GET"])
 def api_demo_events(run_id):
-    """Poll live status and event queue for the interactive live demo."""
+    """Poll live status and event queue for interactive demo."""
+    validate_id_format(run_id, "Run ID")
     with DEMO_LOCK:
         run_data = DEMO_RUNS.get(run_id)
         if not run_data:
@@ -407,8 +584,9 @@ def api_demo_events(run_id):
 @app.route("/api/demo/<run_id>/control", methods=["POST"])
 def api_demo_control(run_id):
     """Pause, resume, or alter speed of live demo."""
-    data = request.get_json() or {}
-    action = data.get("action")  # "pause", "resume", "speed"
+    validate_id_format(run_id, "Run ID")
+    data = request.get_json(silent=True) or {}
+    action = data.get("action")
     with DEMO_LOCK:
         run_data = DEMO_RUNS.get(run_id)
         if not run_data:
@@ -418,21 +596,21 @@ def api_demo_control(run_id):
         elif action == "resume":
             run_data["is_paused"] = False
         elif action == "speed":
-            run_data["speed"] = float(data.get("speed", 1.0))
+            run_data["speed"] = max(0.1, min(float(data.get("speed", 1.0)), 20.0))
         return jsonify({"status": "ok", "run": run_data})
 
 
 def _demo_pipeline_worker(run_id, source_type, custom_text, target_profile, protocol, packet_count, speed, transport_mode="convert_transport"):
     """Background worker executing the real pipeline with narrated steps."""
     def wait_step(base_sec):
-        adjusted = max(0.2, base_sec / speed)
+        adjusted = max(0.05, base_sec / speed)
         elapsed = 0.0
         while elapsed < adjusted:
             with DEMO_LOCK:
                 paused = DEMO_RUNS.get(run_id, {}).get("is_paused", False)
             if not paused:
-                time.sleep(0.1)
-                elapsed += 0.1
+                time.sleep(0.05)
+                elapsed += 0.05
             else:
                 time.sleep(0.1)
 
@@ -472,19 +650,19 @@ def _demo_pipeline_worker(run_id, source_type, custom_text, target_profile, prot
             "custom_text": custom_text
         }
         gen._worker(params)
-        wait_step(0.8)
+        wait_step(0.4)
 
         # Step 2: Feature Extraction
         update_demo(2, "Extracting Observable Features", "Computing packet size distribution, inter-packet arrival times, and jitter...", 35)
         feat_before = extract_and_save_features(exp_id)
         update_demo(2, "Features Extracted", f"Calculated mean packet size ({feat_before['mean_size']} B) and mean cadence ({feat_before['mean_ipt_ms']} ms).", 45, {"features_before": feat_before})
-        wait_step(0.8)
+        wait_step(0.4)
 
         # Step 3: Classify Baseline Traffic
         update_demo(3, "Classifying Original Traffic", "DPI Heuristic evaluating baseline observable features against catalog profiles...", 55)
         class_before = classify_traffic(feat_before)
         update_demo(3, "Baseline Classified", f"Classifier tagged traffic as '{class_before['category_name']}' with {class_before['confidence']}% confidence.", 65, {"classification_before": class_before})
-        wait_step(1.0)
+        wait_step(0.5)
 
         # Step 4: Apply Mimicry & Resend
         target_name = get_profile(target_profile)["name"]
@@ -497,14 +675,14 @@ def _demo_pipeline_worker(run_id, source_type, custom_text, target_profile, prot
             original_text=custom_text if source_type == "custom_text" else None
         )
         update_demo(4, "Re-transmitted Transformed Traffic", "Resent transformed stream over 127.0.0.1 and measured real arrival characteristics.", 82, {"mimic_result": mimic_res})
-        wait_step(1.0)
+        wait_step(0.5)
 
         # Step 5: Classify Transformed Traffic
         update_demo(5, "Classifying Transformed Traffic", "Evaluating mimicked traffic against rule-based DPI heuristics...", 90)
         feat_after = mimic_res["transformed_features"]
         class_after = classify_traffic(feat_after)
         update_demo(5, "Transformed Classified", f"Transformed traffic recognized as '{class_after['category_name']}' with {class_after['confidence']}% confidence.", 93, {"classification_after": class_after})
-        wait_step(0.8)
+        wait_step(0.4)
 
         # Step 6: Comparison & Deception Verdict
         update_demo(6, "Generating Comparative Verdict", "Analyzing feature deltas, overhead cost, and deception success...", 97)
@@ -554,4 +732,4 @@ def _demo_pipeline_worker(run_id, source_type, custom_text, target_profile, prot
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host=HOST, port=PORT, debug=False)

@@ -1,21 +1,21 @@
 {
-  "weights": {
-    "packet_size": 0.25,
-    "timing": 0.25,
-    "volume": 0.15,
-    "burst_jitter": 0.20,
-    "transport": 0.15
-  },
+  "burst_ipt_threshold_ms": 20.0,
   "thresholds": {
     "high_confidence": 80.0,
     "moderate_confidence": 50.0
   },
   "tolerances": {
+    "burst_decay_len": 4.0,
+    "jitter_decay_ms": 25.0,
     "size_decay_bytes": 350.0,
     "timing_decay_ms": 60.0,
-    "volume_decay_count": 80.0,
-    "jitter_decay_ms": 25.0,
-    "burst_decay_len": 4.0
+    "volume_decay_count": 80.0
   },
-  "burst_ipt_threshold_ms": 20.0
+  "weights": {
+    "burst_jitter": 0.2,
+    "packet_size": 0.25,
+    "timing": 0.25,
+    "transport": 0.15,
+    "volume": 0.15
+  }
 }

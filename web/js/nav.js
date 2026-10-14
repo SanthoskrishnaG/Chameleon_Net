@@ -1,9 +1,11 @@
 /**
  * Navigation, Layout Component Injection, and Health Monitoring
  * Protocol Mimicry Engine Laboratory
+ * Integrated with configurable Backend Connection modal for Vercel/Render hosting
  */
 
-import { API } from "./api.js";
+import { API, showToast } from "./api.js";
+import { getApiBaseUrl, setApiBaseUrl, getApiKey, setApiKey, resetConfig } from "./config.js";
 
 const NAV_ITEMS = [
   { section: "LABORATORY" },
@@ -67,12 +69,15 @@ export function setupNavigation(activePageId) {
     navHtml += `
       </nav>
       <div class="sidebar-footer">
-        <div class="guard-pill">
-          <span style="font-size:14px;">🔒</span> 127.0.0.1 Guard Active
+        <div class="guard-pill" style="cursor:pointer;" id="sidebarBackendPill" title="Configure Backend Host">
+          <span style="font-size:14px;">⚙️</span> Backend Config
         </div>
       </div>
     `;
     sidebarEl.innerHTML = navHtml;
+
+    const sbPill = document.getElementById("sidebarBackendPill");
+    if (sbPill) sbPill.onclick = openBackendModal;
   }
 
   // Inject Topbar
@@ -82,6 +87,8 @@ export function setupNavigation(activePageId) {
     const stageText = currentItem.stage !== null && currentItem.stage !== undefined && currentItem.stage > 0 
       ? `Stage 0${currentItem.stage}` 
       : "Controlled Environment";
+
+    const currentBaseUrl = getApiBaseUrl() || "Localhost (5000)";
 
     topbarEl.innerHTML = `
       <div class="topbar-left">
@@ -96,9 +103,11 @@ export function setupNavigation(activePageId) {
         </div>
       </div>
       <div class="topbar-right">
-        <span class="status-chip">Localhost Only</span>
-        <span id="healthChip" class="status-chip online">
-          <span class="pulse-dot"></span> Engine Online
+        <button id="btnBackendConfig" class="status-chip" style="cursor:pointer; border:1px solid #CBD5E1; background:#F8FAFC;" title="Configure Backend API Destination">
+          <span>⚙</span> <span id="backendHostLabel">Backend: ${truncateUrl(currentBaseUrl)}</span>
+        </button>
+        <span id="healthChip" class="status-chip" style="cursor:pointer;" title="Click to view backend connection details">
+          <span class="pulse-dot"></span> Checking...
         </span>
       </div>
     `;
@@ -110,6 +119,12 @@ export function setupNavigation(activePageId) {
         if (sb) sb.classList.toggle("open");
       };
     }
+
+    const cfgBtn = document.getElementById("btnBackendConfig");
+    if (cfgBtn) cfgBtn.onclick = openBackendModal;
+
+    const healthChip = document.getElementById("healthChip");
+    if (healthChip) healthChip.onclick = openBackendModal;
   }
 
   // Inject Stepper Strip if element exists
@@ -124,15 +139,23 @@ export function setupNavigation(activePageId) {
     footerEl.innerHTML = `
       <div class="safety-notice">
         <span>🛡️</span>
-        <span>Educational computer-networks laboratory. Bound strictly to 127.0.0.1 loopback. Rule-based heuristic classifier. No packet injection or raw sockets.</span>
+        <span>Educational computer-networks laboratory. Socket generation strictly bound to 127.0.0.1. Rule-based heuristic classifier. No packet injection or raw sockets.</span>
       </div>
-      <div>Python 3.10+ | Flask REST Engine</div>
+      <div>Python 3.10+ | Flask Engine | Vercel Compatible</div>
     `;
   }
+
+  // Inject Backend Modal into document body
+  injectBackendModal();
 
   // Start Health Heartbeat
   checkHealth();
   setInterval(checkHealth, 10000);
+}
+
+function truncateUrl(url) {
+  if (!url) return "Local";
+  return url.replace(/^https?:\/\//, "").substring(0, 22);
 }
 
 function renderPipelineStepper(container, activePageId) {
@@ -171,12 +194,193 @@ async function checkHealth() {
   if (!chip) return;
   try {
     const res = await API.get("/api/health");
-    if (res.status === "online") {
+    if (res && res.status === "online") {
       chip.className = "status-chip online";
+      chip.style.background = "";
+      chip.style.color = "";
       chip.innerHTML = `<span class="pulse-dot"></span> Engine Online`;
+    } else {
+      chip.className = "status-chip";
+      chip.style.background = "#FEF3C7";
+      chip.style.color = "#D97706";
+      chip.innerHTML = `<span style="color:#D97706;">●</span> Status: ${res.status || "Unknown"}`;
     }
   } catch (e) {
     chip.className = "status-chip";
-    chip.innerHTML = `<span style="color:#DC2626;">●</span> Engine Offline`;
+    chip.style.background = "#FEE2E2";
+    chip.style.color = "#DC2626";
+    chip.innerHTML = `<span style="color:#DC2626;">●</span> Engine Offline (Configure)`;
   }
+}
+
+/**
+ * Backend Connection Settings Modal
+ */
+function injectBackendModal() {
+  if (document.getElementById("backendSettingsModal")) return;
+
+  const modalHtml = `
+    <div id="backendSettingsModal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.65); z-index:9999; align-items:center; justify-content:center; padding:16px;">
+      <div class="modal-card" style="background:#FFFFFF; border-radius:12px; max-width:540px; width:100%; box-shadow:0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); overflow:hidden;">
+        <div style="padding:18px 24px; border-bottom:1px solid #E2E8F0; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <h3 style="margin:0; font-size:17px; font-weight:800; color:#0F172A;">Backend Connection Settings</h3>
+            <p style="margin:2px 0 0 0; font-size:12px; color:#64748B;">Configure destination API for Vercel frontend or local development</p>
+          </div>
+          <button id="btnCloseBackendModal" style="background:none; border:none; font-size:20px; cursor:pointer; color:#64748B;">✕</button>
+        </div>
+
+        <div style="padding:20px 24px;">
+          <div style="margin-bottom:16px;">
+            <label style="display:block; font-size:13px; font-weight:700; color:#334155; margin-bottom:6px;">
+              Backend API Base URL
+            </label>
+            <input type="text" id="inputBackendUrl" placeholder="e.g. https://chameleon-net.onrender.com or empty for local default"
+              style="width:100%; padding:10px 12px; font-size:13px; border:1px solid #CBD5E1; border-radius:6px; box-sizing:border-box; font-family:monospace;" />
+            <span style="display:block; font-size:11px; color:#64748B; margin-top:4px;">
+              Leave blank when developing locally on 127.0.0.1:5000. When deployed on Vercel, paste your Render web service URL.
+            </span>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <label style="display:block; font-size:13px; font-weight:700; color:#334155; margin-bottom:6px;">
+              API Key (Optional)
+            </label>
+            <input type="password" id="inputBackendKey" placeholder="Enter API Key if configured on backend"
+              style="width:100%; padding:10px 12px; font-size:13px; border:1px solid #CBD5E1; border-radius:6px; box-sizing:border-box; font-family:monospace;" />
+            <span style="display:block; font-size:11px; color:#64748B; margin-top:4px;">
+              Required only if you configured an API_KEY environment variable on your backend host.
+            </span>
+          </div>
+
+          <div id="backendTestResult" style="display:none; padding:12px; border-radius:6px; font-size:12px; margin-bottom:16px;"></div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+            <button id="btnTestBackend" class="btn btn-secondary btn-sm" style="display:flex; align-items:center; gap:6px;">
+              <span id="testSpinner" style="display:none;">⏳</span> Test Connection
+            </button>
+            <div style="display:flex; gap:8px;">
+              <button id="btnResetBackend" class="btn btn-secondary btn-sm">Reset</button>
+              <button id="btnSaveBackend" class="btn btn-primary btn-sm">Save & Apply</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML("beforeend", modalHtml);
+
+  // Bind modal actions
+  const modal = document.getElementById("backendSettingsModal");
+  const btnClose = document.getElementById("btnCloseBackendModal");
+  if (btnClose) btnClose.onclick = () => { modal.style.display = "none"; };
+  modal.onclick = (e) => { if (e.target === modal) modal.style.display = "none"; };
+
+  const btnTest = document.getElementById("btnTestBackend");
+  if (btnTest) btnTest.onclick = testConnection;
+
+  const btnSave = document.getElementById("btnSaveBackend");
+  if (btnSave) btnSave.onclick = saveBackendConfig;
+
+  const btnReset = document.getElementById("btnResetBackend");
+  if (btnReset) btnReset.onclick = resetBackendConfig;
+}
+
+function openBackendModal() {
+  const modal = document.getElementById("backendSettingsModal");
+  if (!modal) return;
+  const inputUrl = document.getElementById("inputBackendUrl");
+  const inputKey = document.getElementById("inputBackendKey");
+  const testBox = document.getElementById("backendTestResult");
+
+  if (inputUrl) inputUrl.value = getApiBaseUrl();
+  if (inputKey) inputKey.value = getApiKey();
+  if (testBox) testBox.style.display = "none";
+
+  modal.style.display = "flex";
+}
+
+async function testConnection() {
+  const inputUrl = document.getElementById("inputBackendUrl");
+  const inputKey = document.getElementById("inputBackendKey");
+  const testBox = document.getElementById("backendTestResult");
+  const spinner = document.getElementById("testSpinner");
+
+  if (!testBox) return;
+  testBox.style.display = "block";
+  testBox.style.background = "#F1F5F9";
+  testBox.style.color = "#334155";
+  testBox.innerHTML = "Pinging /api/health endpoint...";
+  if (spinner) spinner.style.display = "inline";
+
+  const targetUrl = (inputUrl.value.trim().replace(/\/+$/, "") || "");
+  const targetKey = inputKey.value.trim();
+  const testHealthUrl = targetUrl ? `${targetUrl}/api/health` : "/api/health";
+
+  const t0 = performance.now();
+  try {
+    const headers = {};
+    if (targetKey) headers["X-API-Key"] = targetKey;
+
+    const res = await fetch(testHealthUrl, { method: "GET", headers });
+    const latency = Math.round(performance.now() - t0);
+
+    if (res.ok) {
+      const data = await res.json();
+      testBox.style.background = "#DCFCE7";
+      testBox.style.color = "#15803D";
+      testBox.innerHTML = `
+        <strong>✓ Connection Successful (${latency} ms)</strong><br>
+        Engine: ${data.engine || "Protocol Mimicry Engine"}<br>
+        Status: ${data.status} | Storage: ${data.storage || "sqlite+file"}<br>
+        Loopback Telemetry: Active (127.0.0.1) | Auth Required: ${data.auth_required ? "Yes" : "No"}
+      `;
+    } else {
+      testBox.style.background = "#FEE2E2";
+      testBox.style.color = "#B91C1C";
+      testBox.innerHTML = `<strong>✗ HTTP ${res.status}: ${res.statusText}</strong><br>The server responded with an error.`;
+    }
+  } catch (err) {
+    testBox.style.background = "#FEE2E2";
+    testBox.style.color = "#B91C1C";
+    testBox.innerHTML = `
+      <strong>✗ Connection Failed</strong><br>
+      Could not reach <code>${testHealthUrl}</code>.<br>
+      Verify that the backend is active, accessible, and CORS is set to allow this domain.
+    `;
+  } finally {
+    if (spinner) spinner.style.display = "none";
+  }
+}
+
+function saveBackendConfig() {
+  const inputUrl = document.getElementById("inputBackendUrl");
+  const inputKey = document.getElementById("inputBackendKey");
+  const modal = document.getElementById("backendSettingsModal");
+
+  setApiBaseUrl(inputUrl.value);
+  setApiKey(inputKey.value);
+
+  const label = document.getElementById("backendHostLabel");
+  if (label) {
+    label.innerText = `Backend: ${truncateUrl(getApiBaseUrl() || "Localhost (5000)")}`;
+  }
+
+  showToast("Backend connection settings saved.", "success");
+  if (modal) modal.style.display = "none";
+
+  checkHealth();
+}
+
+function resetBackendConfig() {
+  resetConfig();
+  const inputUrl = document.getElementById("inputBackendUrl");
+  const inputKey = document.getElementById("inputBackendKey");
+  if (inputUrl) inputUrl.value = "";
+  if (inputKey) inputKey.value = "";
+  const label = document.getElementById("backendHostLabel");
+  if (label) label.innerText = "Backend: Local";
+  showToast("Reset to default localhost connection.", "info");
+  checkHealth();
 }

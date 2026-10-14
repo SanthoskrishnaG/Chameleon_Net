@@ -111,6 +111,51 @@
         </div>
 
         <!-- Action Buttons -->
+        
+        <!-- Backend API Connection & Cloud Deployment Card -->
+        <div class="card" style="margin-top:24px;">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">3. Backend Service & Cloud Deployment Connection</h3>
+              <p class="card-subtitle">Configure the remote networking service endpoint (e.g. Render, Railway) when running on Vercel</p>
+            </div>
+            <span id="backendStatusBadge" class="badge badge-amber">Checking...</span>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+            <div class="form-group">
+              <label class="form-label" for="backendUrlInput">Backend API Base URL</label>
+              <input type="text" id="backendUrlInput" class="form-input mono" placeholder="http://127.0.0.1:5000 or https://your-backend.onrender.com">
+              <span class="form-helper">Leave blank or set to http://127.0.0.1:5000 for local development. Set to your Render URL for Vercel.</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="apiKeyInput">API Key (Optional / Deployment Access)</label>
+              <input type="password" id="apiKeyInput" class="form-input mono" placeholder="Optional API Key">
+              <span class="form-helper">Required if the backend service has configured an API_KEY environment variable.</span>
+            </div>
+          </div>
+
+          <div id="connectionDiagnosticBox" style="margin-top:16px; padding:12px 16px; background:var(--bg); border:1px solid var(--border); border-radius:8px; display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span id="diagnosticText" style="font-size:13px; font-weight:600; color:var(--text);"></span>
+              <span id="latencyBadge" class="mono" style="font-size:12px; color:var(--text-muted);"></span>
+            </div>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+            <button id="btnResetConnection" class="btn btn-secondary">
+              Reset to Localhost
+            </button>
+            <button id="btnTestConnection" class="btn btn-secondary">
+              Test Connection
+            </button>
+            <button id="btnSaveConnection" class="btn btn-primary">
+              Save Backend Settings
+            </button>
+          </div>
+        </div>
+
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
           <button id="btnResetSettings" class="btn btn-secondary">
             Reset to Factory Defaults
