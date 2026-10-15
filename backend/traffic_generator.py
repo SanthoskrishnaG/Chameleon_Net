@@ -207,6 +207,33 @@ class TrafficGenerator:
                         GENERATION_TASKS[exp_id]["target_count"] = packet_count
                         GENERATION_TASKS[exp_id]["total_bytes"] = len(file_bytes)
 
+                if (params or {}).get("caller") != "api_files_transfer":
+                    assigned_file_id = (params or {}).get("file_id") or f"FILE-{int(time.time()*1000)}-{os.urandom(2).hex()}"
+                    params["file_id"] = assigned_file_id
+                    try:
+                        from backend.json_storage import log_transfer_event
+                        log_transfer_event(
+                            event_type="file_transfer",
+                            status="started",
+                            message=f"File transfer started for '{params.get('filename', 'transfer.bin')}' ({len(file_bytes)} B) over {proto}.",
+                            file_id=assigned_file_id,
+                            experiment_id=exp_id,
+                            original_filename=params.get("filename", "transfer.bin"),
+                            size_bytes=len(file_bytes),
+                            protocol=proto,
+                            integrity_verified=False,
+                            details={
+                                "original_filename": params.get("filename", "transfer.bin"),
+                                "filename": params.get("filename", "transfer.bin"),
+                                "size_bytes": len(file_bytes),
+                                "protocol": proto,
+                                "sha256": params.get("sent_sha256", ""),
+                                "integrity_verified": False
+                            }
+                        )
+                    except Exception as le:
+                        print(f"Warning: could not log file_transfer started event: {le}")
+
             if proto == "TCP":
                 self._run_tcp(
                     packet_count=packet_count,
@@ -483,7 +510,7 @@ class TrafficGenerator:
                 if file_match:
                     # Atomically finalize the reconstructed file
                     now = datetime.now()
-                    file_id = f"FILE-{now.strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
+                    file_id = (params or {}).get("file_id") or f"FILE-{now.strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
                     safe_name = sanitize_filename(filename)
                     final_path = UPLOADS_DIR / f"{file_id}_{safe_name}"
                     
@@ -711,7 +738,7 @@ class TrafficGenerator:
             # Only write and finalize file to storage if transfer is 100% complete & verified
             if file_match and len(reassembled_bytes) > 0:
                 now = datetime.now()
-                file_id = f"FILE-{now.strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
+                file_id = (params or {}).get("file_id") or f"FILE-{now.strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
                 safe_name = sanitize_filename(filename)
                 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
                 final_path = UPLOADS_DIR / f"{file_id}_{safe_name}"
@@ -774,7 +801,7 @@ class TrafficGenerator:
         try:
             from backend.json_storage import (
                 save_transferred_file, save_analysis_result, save_experiment,
-                detect_mime_type, sanitize_filename
+                detect_mime_type, sanitize_filename, log_transfer_event
             )
             from backend.feature_extractor import extract_and_save_features
             from backend.dpi_classifier import classify_traffic
@@ -813,7 +840,7 @@ class TrafficGenerator:
             transfer_end = datetime.now().isoformat()
 
             if payload_mode == "file":
-                assigned_file_id = file_id or f"FILE-{int(time.time()*1000)}-{os.urandom(2).hex()}"
+                assigned_file_id = (params or {}).get("file_id") or file_id or f"FILE-{int(time.time()*1000)}-{os.urandom(2).hex()}"
                 file_rec = {
                     "file_id": assigned_file_id,
                     "original_filename": filename,
@@ -836,7 +863,31 @@ class TrafficGenerator:
                     "analysis_id": analysis_id,
                     "created_at": transfer_end
                 }
-                save_transferred_file(file_rec)
+                save_transferred_file(file_rec, auto_log=False)
+
+                if (params or {}).get("caller") != "api_files_transfer":
+                    log_transfer_event(
+                        event_type="file_transfer",
+                        status=status,
+                        message=f"File transfer {status} for '{filename}' ({file_rec['size_bytes']} B) over {file_rec['transfer_protocol']}." + (" Integrity verified." if file_rec["integrity_verified"] else " Verification failed or incomplete."),
+                        file_id=assigned_file_id,
+                        experiment_id=exp_id,
+                        original_filename=filename,
+                        size_bytes=file_rec["size_bytes"],
+                        protocol=file_rec["transfer_protocol"],
+                        integrity_verified=file_rec["integrity_verified"],
+                        details={
+                            "original_filename": filename,
+                            "filename": filename,
+                            "size_bytes": file_rec["size_bytes"],
+                            "protocol": file_rec["transfer_protocol"],
+                            "sha256": file_rec["sha256"],
+                            "received_sha256": file_rec["received_sha256"],
+                            "integrity_verified": file_rec["integrity_verified"],
+                            "duration_ms": file_rec["duration_ms"]
+                        },
+                        error=None if file_rec["integrity_verified"] else f"Transfer ended with status: {status}"
+                    )
 
             text_info = None
             if payload_mode == "custom_text":

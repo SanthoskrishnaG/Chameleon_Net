@@ -298,6 +298,12 @@ async function handleFileTransfer(e) {
     fileInput.value = "";
     loadTransferredFiles();
 
+    // Notify logs page & listeners
+    try {
+      window.dispatchEvent(new CustomEvent("chameleon:file_transferred", { detail: res }));
+      localStorage.setItem("chameleon_last_transfer_ts", Date.now().toString());
+    } catch (_) {}
+
   } catch (err) {
     showToast(`Transmission failed: ${err.message}`, "error");
     if (resultBanner && resultContent) {
@@ -403,6 +409,10 @@ async function deleteFileRecord(fileId) {
     await API.delete(`/api/files/${fileId}`);
     showToast(`File record ${fileId} deleted.`, "success");
     loadTransferredFiles();
+    try {
+      window.dispatchEvent(new CustomEvent("chameleon:file_deleted", { detail: { fileId } }));
+      localStorage.setItem("chameleon_last_transfer_ts", Date.now().toString());
+    } catch (_) {}
   } catch (err) {
     showToast(`Failed to delete record: ${err.message}`, "error");
   }

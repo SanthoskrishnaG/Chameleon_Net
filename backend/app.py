@@ -393,6 +393,51 @@ def api_files_transfer():
     gen = TrafficGenerator()
     exp_id = gen.experiment_id
 
+    # Create initial file record with 'started' status
+    file_record = {
+        "file_id": file_id,
+        "original_filename": filename,
+        "sanitized_filename": sanitize_filename(filename),
+        "extension": ext,
+        "mime_type": detect_mime_type(filename),
+        "size_bytes": len(raw_bytes),
+        "sha256": original_sha256,
+        "received_sha256": None,
+        "integrity_verified": False,
+        "transfer_protocol": protocol,
+        "source_label": "Client (127.0.0.1)",
+        "dest_label": "Server (127.0.0.1)",
+        "storage_path": str(storage_path),
+        "transfer_started_at": start_iso,
+        "transfer_completed_at": None,
+        "duration_ms": 0.0,
+        "status": "started",
+        "experiment_id": exp_id,
+        "created_at": start_iso
+    }
+    save_transferred_file(file_record, auto_log=False)
+
+    # Log initial 'started' transfer event
+    log_transfer_event(
+        event_type="file_transfer",
+        status="started",
+        message=f"File transfer started for '{filename}' ({len(raw_bytes)} B) over {protocol}.",
+        file_id=file_id,
+        experiment_id=exp_id,
+        original_filename=filename,
+        size_bytes=len(raw_bytes),
+        protocol=protocol,
+        integrity_verified=False,
+        details={
+            "original_filename": filename,
+            "filename": filename,
+            "size_bytes": len(raw_bytes),
+            "protocol": protocol,
+            "sha256": original_sha256,
+            "integrity_verified": False
+        }
+    )
+
     t0 = time.time()
     try:
         gen._worker({
@@ -402,15 +447,34 @@ def api_files_transfer():
             "direction": "client->server",
             "payload_mode": "file",
             "file_bytes": raw_bytes,
-            "sent_sha256": original_sha256
+            "sent_sha256": original_sha256,
+            "file_id": file_id,
+            "filename": filename,
+            "file_size": len(raw_bytes),
+            "caller": "api_files_transfer"
         })
     except Exception as e:
+        file_record["status"] = "failed"
+        file_record["error"] = str(e)
+        save_transferred_file(file_record, auto_log=False)
         log_transfer_event(
             event_type="file_transfer",
             status="failed",
-            message=f"Socket transfer failed for {filename}: {e}",
+            message=f"Socket transfer failed for '{filename}': {e}",
             file_id=file_id,
             experiment_id=exp_id,
+            original_filename=filename,
+            size_bytes=len(raw_bytes),
+            protocol=protocol,
+            integrity_verified=False,
+            details={
+                "original_filename": filename,
+                "filename": filename,
+                "size_bytes": len(raw_bytes),
+                "protocol": protocol,
+                "sha256": original_sha256,
+                "integrity_verified": False
+            },
             error=str(e)
         )
         return jsonify({"error": f"Socket transmission failure: {e}"}), 500
@@ -420,7 +484,16 @@ def api_files_transfer():
 
     task_info = GENERATION_TASKS.get(exp_id, {})
     received_sha256 = task_info.get("file_sha256") or original_sha256
-    integrity_verified = (received_sha256 == original_sha256)
+    file_match = task_info.get("file_match", True)
+    task_status = task_info.get("status", "completed")
+
+    checksum_matches = (received_sha256 == original_sha256)
+    integrity_verified = bool(file_match and checksum_matches and task_status == "completed")
+    final_status = "completed" if integrity_verified else ("incomplete" if task_status == "incomplete" else "failed")
+    error_msg = None if integrity_verified else (
+        f"Checksum mismatch: expected {original_sha256[:16]}..., got {received_sha256[:16]}..."
+        if not checksum_matches else "Transfer incomplete or packets lost."
+    )
 
     # 5. Extract Features & Classify
     feat_before = extract_and_save_features(exp_id)
@@ -451,34 +524,45 @@ def api_files_transfer():
         "classifier_config_version": "1.0.0",
         "analysis_timestamp": end_iso,
         "execution_status": "completed",
-        "errors": None
+        "errors": error_msg
     }
     save_analysis_result(analysis_record)
 
-    # 7. Save Transferred File Record (`transferred_files.json`)
-    file_record = {
-        "file_id": file_id,
-        "original_filename": filename,
-        "sanitized_filename": sanitize_filename(filename),
-        "extension": ext,
-        "mime_type": detect_mime_type(filename),
-        "size_bytes": len(raw_bytes),
-        "sha256": original_sha256,
+    # 7. Update Transferred File Record (`transferred_files.json`)
+    file_record.update({
         "received_sha256": received_sha256,
         "integrity_verified": integrity_verified,
-        "transfer_protocol": protocol,
-        "source_label": "Client (127.0.0.1)",
-        "dest_label": "Server (127.0.0.1)",
-        "storage_path": str(storage_path),
-        "transfer_started_at": start_iso,
         "transfer_completed_at": end_iso,
         "duration_ms": duration_ms,
-        "status": "completed" if integrity_verified else "interrupted",
-        "experiment_id": exp_id,
+        "status": final_status,
         "analysis_id": analysis_id,
-        "created_at": start_iso
-    }
-    save_transferred_file(file_record)
+        "error": error_msg
+    })
+    save_transferred_file(file_record, auto_log=False)
+
+    # 8. Log Final Completed / Failed Event in transfer_logs.json
+    log_transfer_event(
+        event_type="file_transfer",
+        status=final_status,
+        message=f"File transfer {final_status} for '{filename}' ({len(raw_bytes)} B) over {protocol}." + (" SHA-256 verified." if integrity_verified else f" Error: {error_msg}"),
+        file_id=file_id,
+        experiment_id=exp_id,
+        original_filename=filename,
+        size_bytes=len(raw_bytes),
+        protocol=protocol,
+        integrity_verified=integrity_verified,
+        details={
+            "original_filename": filename,
+            "filename": filename,
+            "size_bytes": len(raw_bytes),
+            "protocol": protocol,
+            "sha256": original_sha256,
+            "received_sha256": received_sha256,
+            "integrity_verified": integrity_verified,
+            "duration_ms": duration_ms
+        },
+        error=error_msg
+    )
 
     # 8. Save Experiment Record (`experiments.json`)
     exp_record = {

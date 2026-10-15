@@ -106,7 +106,7 @@ def _read_json(target_path: Path, default_factory) -> Any:
 # --------------------------------------------------------------------------
 # 1. Transferred Files Dataset (`transferred_files.json`)
 # --------------------------------------------------------------------------
-def save_transferred_file(record: Dict[str, Any]) -> Dict[str, Any]:
+def save_transferred_file(record: Dict[str, Any], auto_log: bool = False) -> Dict[str, Any]:
     """Insert or update a transferred file record."""
     if "file_id" not in record:
         record["file_id"] = f"FILE-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
@@ -125,19 +125,27 @@ def save_transferred_file(record: Dict[str, Any]) -> Dict[str, Any]:
             files.insert(0, record)
         _atomic_write_json(TRANSFERRED_FILES_PATH, files)
 
-    # Automatically generate an audit log entry
-    log_transfer_event(
-        event_type="file_transfer",
-        status=record.get("status", "completed"),
-        message=f"File '{record.get('original_filename')}' ({record.get('size_bytes', 0)} B) logged with status {record.get('status')}.",
-        file_id=record["file_id"],
-        experiment_id=record.get("experiment_id"),
-        details={
-            "protocol": record.get("transfer_protocol"),
-            "sha256": record.get("sha256"),
-            "integrity_verified": record.get("integrity_verified", False)
-        }
-    )
+    if auto_log or record.get("auto_log"):
+        log_transfer_event(
+            event_type="file_transfer",
+            status=record.get("status", "completed"),
+            message=f"File '{record.get('original_filename')}' ({record.get('size_bytes', 0)} B) logged with status {record.get('status')}.",
+            file_id=record["file_id"],
+            experiment_id=record.get("experiment_id"),
+            original_filename=record.get("original_filename"),
+            size_bytes=record.get("size_bytes", 0),
+            protocol=record.get("transfer_protocol"),
+            integrity_verified=record.get("integrity_verified", False),
+            details={
+                "original_filename": record.get("original_filename"),
+                "filename": record.get("original_filename"),
+                "size_bytes": record.get("size_bytes", 0),
+                "protocol": record.get("transfer_protocol"),
+                "sha256": record.get("sha256"),
+                "received_sha256": record.get("received_sha256"),
+                "integrity_verified": record.get("integrity_verified", False)
+            }
+        )
     return record
 
 
@@ -219,10 +227,21 @@ def delete_transferred_file(file_id: str) -> bool:
 
     log_transfer_event(
         event_type="file_delete",
-        status="success",
+        status="completed",
         message=f"File {file_id} ({target.get('original_filename')}) was deleted from laboratory storage.",
         file_id=file_id,
-        experiment_id=target.get("experiment_id")
+        experiment_id=target.get("experiment_id"),
+        original_filename=target.get("original_filename"),
+        size_bytes=target.get("size_bytes"),
+        protocol=target.get("transfer_protocol"),
+        details={
+            "original_filename": target.get("original_filename"),
+            "filename": target.get("original_filename"),
+            "size_bytes": target.get("size_bytes"),
+            "protocol": target.get("transfer_protocol"),
+            "sha256": target.get("sha256"),
+            "storage_path": storage_path
+        }
     )
     return True
 
@@ -685,25 +704,54 @@ def log_transfer_event(
     file_id: Optional[str] = None,
     experiment_id: Optional[str] = None,
     details: Optional[Dict[str, Any]] = None,
-    error: Optional[str] = None
+    error: Optional[str] = None,
+    original_filename: Optional[str] = None,
+    size_bytes: Optional[int] = None,
+    protocol: Optional[str] = None,
+    integrity_verified: Optional[bool] = None,
+    timestamp: Optional[str] = None
 ) -> Dict[str, Any]:
     """Append a structured, sanitized event record to transfer_logs.json."""
     event_id = f"LOG-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
+    details = (details or {}).copy()
+
+    fname = original_filename or details.get("original_filename") or details.get("filename")
+    s_bytes = size_bytes if size_bytes is not None else details.get("size_bytes")
+    proto = protocol or details.get("protocol") or details.get("transfer_protocol")
+    int_ver = integrity_verified if integrity_verified is not None else details.get("integrity_verified")
+
+    if fname:
+        details.setdefault("original_filename", fname)
+        details.setdefault("filename", fname)
+    if s_bytes is not None:
+        details.setdefault("size_bytes", s_bytes)
+    if proto:
+        details.setdefault("protocol", proto)
+    if int_ver is not None:
+        details.setdefault("integrity_verified", int_ver)
+
     log_entry = {
         "event_id": event_id,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": timestamp or datetime.now().isoformat(),
         "event_type": event_type,
         "status": status,
         "message": message,
         "file_id": file_id,
         "experiment_id": experiment_id,
-        "details": details or {},
+        "original_filename": fname,
+        "filename": fname,
+        "size_bytes": s_bytes,
+        "protocol": proto,
+        "integrity_verified": int_ver,
+        "details": details,
         "error": error
     }
 
     with LOCKS["logs"]:
         logs = _read_json(TRANSFER_LOGS_PATH, list)
         logs.insert(0, log_entry)
+        # Guarantee descending sort by timestamp
+        logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
         # Cap log history to latest 500 entries to prevent unbounded disk growth
         if len(logs) > 500:
             logs = logs[:500]
@@ -719,9 +767,12 @@ def list_transfer_logs(
     event_type: Optional[str] = None,
     status: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Retrieve paginated, filtered transfer log entries."""
+    """Retrieve paginated, filtered transfer log entries sorted by timestamp descending."""
     with LOCKS["logs"]:
         logs = _read_json(TRANSFER_LOGS_PATH, list)
+
+    # Ensure strictly sorted by timestamp descending
+    logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
 
     filtered = logs
     if event_type:
@@ -737,7 +788,11 @@ def list_transfer_logs(
             if q in l.get("event_id", "").lower() or
                q in l.get("message", "").lower() or
                q in str(l.get("file_id", "")).lower() or
-               q in str(l.get("experiment_id", "")).lower()
+               q in str(l.get("experiment_id", "")).lower() or
+               q in str(l.get("original_filename", "")).lower() or
+               q in str(l.get("filename", "")).lower() or
+               q in str(l.get("protocol", "")).lower() or
+               q in str(l.get("error", "")).lower()
         ]
 
     total = len(filtered)
@@ -746,13 +801,21 @@ def list_transfer_logs(
     start_idx = (page - 1) * per_page
     items = filtered[start_idx:start_idx + per_page]
 
+    stats = {
+        "total": len(logs),
+        "success": sum(1 for l in logs if str(l.get("status", "")).lower() in ("success", "completed")),
+        "failed": sum(1 for l in logs if str(l.get("status", "")).lower() in ("failed", "error", "incomplete")),
+        "started": sum(1 for l in logs if str(l.get("status", "")).lower() == "started")
+    }
+
     return {
         "items": items,
         "logs": items,
         "total": total,
         "page": page,
         "per_page": per_page,
-        "pages": (total + per_page - 1) // per_page if total > 0 else 1
+        "pages": (total + per_page - 1) // per_page if total > 0 else 1,
+        "stats": stats
     }
 
 
