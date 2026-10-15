@@ -1,5 +1,28 @@
 [
   {
+    "file_id": "FILE-20261015-090910-2e53",
+    "original_filename": "transfer.bin",
+    "sanitized_filename": "transfer.bin",
+    "extension": ".bin",
+    "mime_type": "application/octet-stream",
+    "size_bytes": 54,
+    "sha256": "ad14972a78fa6c37f0ca063682a934002af67648cc72bed9c437b933c2596564",
+    "received_sha256": "ad14972a78fa6c37f0ca063682a934002af67648cc72bed9c437b933c2596564",
+    "integrity_verified": true,
+    "transfer_protocol": "TCP",
+    "source_label": "Client (127.0.0.1)",
+    "dest_label": "Server (127.0.0.1)",
+    "storage_path": "C:\\Users\\Santhoskrishna\\Documents\\ChameleonNet\\data\\uploads\\FILE-20261015-090910-2e53_transfer.bin",
+    "transfer_started_at": "2026-10-15T09:09:10.724809",
+    "transfer_completed_at": "2026-10-15T09:09:10.958535",
+    "duration_ms": 1.26,
+    "status": "completed",
+    "experiment_id": "EXP-20261015-090910-6201",
+    "analysis_id": "ANALYSIS-1792035550781-2e33",
+    "created_at": "2026-10-15T09:09:10.958535",
+    "updated_at": "2026-10-15T09:09:11.013888"
+  },
+  {
     "file_id": "FILE-20261015-082756-1277",
     "original_filename": "transfer.bin",
     "sanitized_filename": "transfer.bin",

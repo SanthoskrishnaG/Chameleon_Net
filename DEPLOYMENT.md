@@ -73,18 +73,18 @@ Render is recommended because it supports persistent disks, custom ports, and lo
 
 ## 4. Deploying the Frontend (Vercel)
 
-The repository includes root `vercel.json` and `web/vercel.json` with clean URL rewrites for:
-- `/dashboard` -> `web/dashboard.html`
-- `/files` -> `web/files.html`
-- `/logs` -> `web/logs.html`
-- `/generator` -> `web/generator.html`
-- `/features` -> `web/features.html`
-- `/classifier` -> `web/classifier.html`
-- `/mimicry` -> `web/mimicry.html`
-- `/comparison` -> `web/comparison.html`
-- `/results` -> `web/results.html`
-- `/settings` -> `web/settings.html`
-- `/demo` -> `web/demo.html`
+The repository includes root `vercel.json` (`outputDirectory: "web"`) and `web/vercel.json` with canonical clean URL routing for:
+- `/dashboard`
+- `/files`
+- `/logs`
+- `/generator`
+- `/features`
+- `/classifier`
+- `/mimicry`
+- `/comparison`
+- `/results`
+- `/settings`
+- `/demo`
 
 ### Deploying via Vercel Dashboard
 1. Log into [Vercel](https://vercel.com).

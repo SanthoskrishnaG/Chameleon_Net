@@ -30,7 +30,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple, Union
 
 from backend.config import (
-    DATA_DIR, STORAGE_DIR, UPLOADS_DIR,
+    BASE_DIR, DATA_DIR, STORAGE_DIR, UPLOADS_DIR,
     TRANSFERRED_FILES_PATH, ANALYSIS_RESULTS_PATH, EXPERIMENTS_PATH,
     LAB_DETAILS_PATH, TRANSFER_LOGS_PATH,
     DEFAULT_CLASSIFIER_CONFIG, ensure_directories
