@@ -225,9 +225,12 @@ def extract_features_from_packets(
 
     # Inter-packet time (IPT) series in milliseconds
     ipt_list_ms: List[float] = []
-    for i in range(1, packet_count):
-        dt = timestamps[i] - timestamps[i - 1]
-        ipt_list_ms.append(max(0.0, dt * 1000.0))
+    if packet_count == 1:
+        ipt_list_ms = [0.0]
+    else:
+        for i in range(1, packet_count):
+            dt = timestamps[i] - timestamps[i - 1]
+            ipt_list_ms.append(max(0.0, dt * 1000.0))
 
     if ipt_list_ms:
         mean_ipt_ms = float(statistics.mean(ipt_list_ms))

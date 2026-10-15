@@ -162,26 +162,83 @@ function truncateUrl(url) {
   return url.replace(/^https?:\/\//, "").substring(0, 22);
 }
 
-function renderPipelineStepper(container, activePageId) {
+export function renderPipelineStepper(container, activePageId, expId = null) {
+  if (!expId) {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      expId = urlParams.get("id");
+    } catch (e) {}
+  }
+
+  const querySuffix = expId ? `?id=${encodeURIComponent(expId)}` : "";
+
   const steps = [
-    { id: "generator", num: 1, label: "Generate Baseline", href: "generator.html" },
-    { id: "features", num: 2, label: "Extract Features", href: "features.html" },
-    { id: "classifier", num: 3, label: "Classify Baseline", href: "classifier.html" },
-    { id: "mimicry", num: 4, label: "Apply Mimicry", href: "mimicry.html" },
-    { id: "comparison", num: 5, label: "Compare & Evaluate", href: "comparison.html" }
+    { id: "generator", num: 1, label: "Generate Baseline", href: `generator.html${querySuffix}` },
+    { id: "features", num: 2, label: "Extract Features", href: `features.html${querySuffix}` },
+    { id: "classifier", num: 3, label: "Classify Baseline", href: `classifier.html${querySuffix}` },
+    { id: "mimicry", num: 4, label: "Apply Mimicry", href: `mimicry.html${querySuffix}` },
+    { id: "comparison", num: 5, label: "Compare & Evaluate", href: `comparison.html${querySuffix}` }
   ];
 
   const currentIdx = steps.findIndex(s => s.id === activePageId);
 
-  let html = `<div class="stepper">`;
+  let html = `<div class="stepper" id="pipelineStepperStrip">`;
   steps.forEach((s, idx) => {
     let state = "";
     if (idx < currentIdx) state = "completed";
     else if (idx === currentIdx) state = "active";
 
     html += `
-      <a href="${s.href}" class="step-item ${state}">
+      <a href="${s.href}" class="step-item ${state}" id="step-${s.id}">
         <span class="step-num">${state === "completed" ? "✓" : s.num}</span>
+        <span>${s.label}</span>
+      </a>
+    `;
+    if (idx < steps.length - 1) {
+      html += `<span class="step-arrow">→</span>`;
+    }
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+export function updatePipelineStepperState(expRecord, activePageId = "comparison") {
+  const container = document.getElementById("appStepper");
+  if (!container) return;
+
+  const expId = expRecord?.id || expRecord?.experiment_id || new URLSearchParams(window.location.search).get("id");
+  const querySuffix = expId ? `?id=${encodeURIComponent(expId)}` : "";
+
+  const hasBaseline = Boolean(expRecord && (expRecord.features_before || expRecord.packet_count > 0));
+  const hasFeatures = Boolean(expRecord && expRecord.features_before);
+  const hasClassification = Boolean(expRecord && (expRecord.classification_before || expRecord.category_before));
+  const hasMimicry = Boolean(expRecord && (expRecord.features_after || expRecord.mimicry_config));
+  const hasComparison = Boolean(expRecord && expRecord.comparison);
+
+  const stepStatus = {
+    generator: hasBaseline ? "completed" : (activePageId === "generator" ? "active" : ""),
+    features: hasFeatures ? "completed" : (activePageId === "features" ? "active" : ""),
+    classifier: hasClassification ? "completed" : (activePageId === "classifier" ? "active" : ""),
+    mimicry: hasMimicry ? "completed" : (activePageId === "mimicry" ? "active" : ""),
+    comparison: hasComparison ? "completed" : (activePageId === "comparison" ? "active" : "")
+  };
+
+  const steps = [
+    { id: "generator", num: 1, label: "Generate Baseline", href: `generator.html${querySuffix}` },
+    { id: "features", num: 2, label: "Extract Features", href: `features.html${querySuffix}` },
+    { id: "classifier", num: 3, label: "Classify Baseline", href: `classifier.html${querySuffix}` },
+    { id: "mimicry", num: 4, label: "Apply Mimicry", href: `mimicry.html${querySuffix}` },
+    { id: "comparison", num: 5, label: "Compare & Evaluate", href: `comparison.html${querySuffix}` }
+  ];
+
+  let html = `<div class="stepper" id="pipelineStepperStrip">`;
+  steps.forEach((s, idx) => {
+    const state = stepStatus[s.id] || (s.id === activePageId ? "active" : "");
+    const isCompleted = state === "completed";
+
+    html += `
+      <a href="${s.href}" class="step-item ${state}" id="step-${s.id}">
+        <span class="step-num">${isCompleted ? "✓" : s.num}</span>
         <span>${s.label}</span>
       </a>
     `;

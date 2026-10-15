@@ -204,6 +204,21 @@ class MimicryEngine:
 
         # Extract transformed features
         transformed_features = extract_and_save_features(self.experiment_id, suffix="_mimic")
+        mimicry_exp_id = f"{self.experiment_id}_mimic"
+        transformed_features["experiment_id"] = self.experiment_id
+        transformed_features["original_experiment_id"] = self.experiment_id
+        transformed_features["mimicry_experiment_id"] = mimicry_exp_id
+        transformed_features["parent_experiment_id"] = self.experiment_id
+        transformed_features["comparison_id"] = self.experiment_id
+
+        # Update saved mimic feature json with linking IDs
+        try:
+            feat_path = FEATURES_DIR / f"{self.experiment_id}_mimic.json"
+            if feat_path.exists():
+                with open(feat_path, "w", encoding="utf-8") as f:
+                    json.dump(transformed_features, f, indent=2)
+        except Exception:
+            pass
 
         # Load or extract original features
         original_features = load_saved_features(self.experiment_id)
@@ -245,6 +260,10 @@ class MimicryEngine:
 
         return {
             "experiment_id": self.experiment_id,
+            "original_experiment_id": self.experiment_id,
+            "mimicry_experiment_id": mimicry_exp_id,
+            "parent_experiment_id": self.experiment_id,
+            "comparison_id": self.experiment_id,
             "target_profile": target_prof,
             "toggles": toggles,
             "transport_mode": transport_mode,

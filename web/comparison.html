@@ -32,7 +32,11 @@
               Experiment ID: <strong id="expIdBadge" class="mono" style="color:var(--primary);">-</strong>
             </p>
           </div>
-          <div style="display:flex; gap:10px;">
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label for="comparisonExpSelector" style="font-size:12px; font-weight:600; color:var(--text-muted);">Select Run:</label>
+              <select id="comparisonExpSelector" class="form-control" style="width:auto; max-width:240px; padding:6px 10px; font-size:12px; font-weight:600;"></select>
+            </div>
             <a id="btnExportReport" target="_blank" href="#" class="btn btn-primary btn-sm">
               <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
               Printable HTML Report

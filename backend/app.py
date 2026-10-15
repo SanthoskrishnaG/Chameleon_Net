@@ -847,6 +847,14 @@ def api_features(exp_id):
         except Exception:
             pass
 
+    # Ensure experiment record reflects latest features
+    exp = get_experiment(exp_id)
+    if exp:
+        exp["features_before"] = before
+        if after:
+            exp["features_after"] = after
+        save_experiment(exp)
+
     return jsonify({
         "experiment_id": exp_id,
         "features_before": before,
@@ -894,6 +902,21 @@ def api_classify(exp_id):
     }
     save_analysis_result(analysis_record)
 
+    # Persist classification to experiment record
+    exp = get_experiment(exp_id)
+    if exp:
+        if stage == "before":
+            exp["classification_before"] = classification
+            exp["analysis_before_id"] = analysis_id
+            if features:
+                exp["features_before"] = features
+        else:
+            exp["classification_after"] = classification
+            exp["analysis_after_id"] = analysis_id
+            if features:
+                exp["features_after"] = features
+        save_experiment(exp)
+
     return jsonify({
         "experiment_id": exp_id,
         "analysis_id": analysis_id,
@@ -936,6 +959,13 @@ def api_mimicry_apply():
         )
 
         before_feat = load_saved_features(exp_id)
+        if not before_feat:
+            exp_rec = get_experiment(exp_id)
+            if exp_rec and exp_rec.get("features_before"):
+                before_feat = exp_rec["features_before"]
+            else:
+                before_feat = extract_and_save_features(exp_id)
+
         after_feat = mimic_res["transformed_features"]
 
         before_class = classify_traffic(before_feat)
@@ -947,14 +977,20 @@ def api_mimicry_apply():
             before_classification=before_class,
             after_classification=after_class,
             target_profile_id=target_profile,
-            overhead=mimic_res["overhead"]
+            overhead=mimic_res["overhead"],
+            content_integrity_verified=mimic_res.get("text_preserved")
         )
 
         # Save transformed analysis result
         analysis_after_id = f"ANALYSIS-{int(time.time()*1000)}-after"
+        mimicry_exp_id = f"{exp_id}_mimic"
         save_analysis_result({
             "analysis_id": analysis_after_id,
             "experiment_id": exp_id,
+            "original_experiment_id": exp_id,
+            "mimicry_experiment_id": mimicry_exp_id,
+            "parent_experiment_id": exp_id,
+            "comparison_id": exp_id,
             "stage": "after",
             "transport_protocol": after_feat.get("protocol", "TCP"),
             "packet_count": after_feat.get("packet_count", 0),
@@ -966,9 +1002,21 @@ def api_mimicry_apply():
             "analysis_timestamp": datetime.now().isoformat()
         })
 
-        exp_record = get_experiment(exp_id) or {"id": exp_id, "config": {}}
+        exp_record = get_experiment(exp_id) or {
+            "id": exp_id,
+            "experiment_id": exp_id,
+            "created_at": datetime.now().isoformat(),
+            "config": {}
+        }
         exp_record.update({
             "id": exp_id,
+            "experiment_id": exp_id,
+            "baseline_experiment_id": exp_id,
+            "original_experiment_id": exp_id,
+            "mimicry_experiment_id": mimicry_exp_id,
+            "parent_experiment_id": exp_id,
+            "comparison_id": exp_id,
+            "workflow_id": exp_id,
             "analysis_after_id": analysis_after_id,
             "features_before": before_feat,
             "classification_before": before_class,
@@ -982,7 +1030,9 @@ def api_mimicry_apply():
             "classification_after": after_class,
             "comparison": comparison,
             "text_preserved": mimic_res.get("text_preserved"),
-            "reassembled_text": mimic_res.get("reassembled_text")
+            "reassembled_text": mimic_res.get("reassembled_text"),
+            "content_integrity_verified": mimic_res.get("text_preserved") if mimic_res.get("text_preserved") is not None else exp_record.get("content_integrity_verified", True),
+            "updated_at": datetime.now().isoformat()
         })
         save_experiment(exp_record)
 
@@ -991,7 +1041,7 @@ def api_mimicry_apply():
             status="completed",
             message=f"Applied mimicry for target '{get_profile(target_profile)['name']}'. Verdict: {comparison.get('status_banner')}.",
             experiment_id=exp_id,
-            details={"target_profile": target_profile, "fooled": comparison.get("fooled")}
+            details={"target_profile": target_profile, "fooled": comparison.get("fooled"), "comparison_id": exp_id}
         )
 
         return jsonify({
@@ -1007,26 +1057,223 @@ def api_mimicry_apply():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/compare/<exp_id>", methods=["GET"])
-def api_compare(exp_id):
-    """Retrieve full comparative analysis between before and after."""
-    validate_id_format(exp_id, "Experiment ID")
-    exp = get_experiment(exp_id)
-    if exp and "comparison" in exp:
-        return jsonify(exp["comparison"])
+@app.route("/api/compare", methods=["GET", "POST"])
+@app.route("/api/compare/<exp_id>", methods=["GET", "POST"])
+def api_compare(exp_id=None):
+    """Retrieve or compute full comparative analysis between baseline and mimicry stages."""
+    body = request.get_json(silent=True) or {}
+    requested_id = exp_id or request.args.get("id") or body.get("id") or body.get("experiment_id") or body.get("comparison_id")
+    baseline_id = request.args.get("baseline_id") or body.get("baseline_id") or body.get("baseline_experiment_id") or requested_id
+    mimicry_id = request.args.get("mimicry_id") or body.get("mimicry_id") or body.get("mimicry_experiment_id")
 
-    before_feat = load_saved_features(exp_id)
-    after_feat = load_saved_features(exp_id, suffix="_mimic")
-    if not before_feat or not after_feat:
-        return jsonify({"error": "Both baseline and mimicry features required for comparison."}), 404
+    req_base_id = body.get("baseline_id") or body.get("baseline_experiment_id") or request.args.get("baseline_id")
+    req_exp_id = exp_id or request.args.get("id") or body.get("id") or body.get("experiment_id") or body.get("comparison_id")
+    if req_base_id and req_exp_id and req_base_id != req_exp_id:
+        return jsonify({
+            "error": f"Workflow mismatch: Requested experiment '{req_exp_id}' does not match baseline '{req_base_id}'.",
+            "baseline_id": req_base_id,
+            "experiment_id": req_exp_id
+        }), 400
 
-    before_class = classify_traffic(before_feat)
-    after_class = classify_traffic(after_feat)
+    if not requested_id and not baseline_id:
+        return jsonify({"error": "Missing comparison or experiment identifier."}), 400
+
+    target_id = requested_id or baseline_id
+    validate_id_format(target_id, "Experiment ID")
+
+    # If target_id ends with _mimic, normalize baseline ID
+    if target_id.endswith("_mimic"):
+        clean_base = target_id[:-6]
+        if not mimicry_id:
+            mimicry_id = target_id
+        baseline_id = clean_base
+
+    # Retrieve experiment record from JSON storage
+    exp = get_experiment(target_id)
+    if not exp and baseline_id != target_id:
+        exp = get_experiment(baseline_id)
+
+    comparison_id = (exp.get("comparison_id") if exp else None) or target_id
+    base_rec_id = (exp.get("baseline_experiment_id") if exp else None) or (exp.get("id") if exp else None) or baseline_id
+    mimic_rec_id = (exp.get("mimicry_experiment_id") if exp else None) or mimicry_id or f"{base_rec_id}_mimic"
+
+    # Step 1: Retrieve baseline features
+    before_feat = None
+    if exp and exp.get("features_before"):
+        before_feat = exp["features_before"]
+    if not before_feat:
+        before_feat = body.get("baseline_features") or body.get("features_before")
+    if not before_feat:
+        before_feat = load_saved_features(base_rec_id)
+    if not before_feat:
+        analysis_before = get_analysis_by_experiment(base_rec_id, stage="before")
+        if analysis_before and "features" in analysis_before:
+            before_feat = analysis_before["features"]
+    if not before_feat:
+        try:
+            before_feat = extract_and_save_features(base_rec_id)
+        except Exception:
+            before_feat = None
+
+    # Step 2: Retrieve post-mimicry features
+    after_feat = None
+    if exp and exp.get("features_after"):
+        after_feat = exp["features_after"]
+    if not after_feat:
+        after_feat = body.get("mimicry_features") or body.get("features_after")
+    if not after_feat:
+        after_feat = load_saved_features(base_rec_id, suffix="_mimic")
+    if not after_feat and mimicry_id:
+        after_feat = load_saved_features(mimicry_id)
+    if not after_feat:
+        analysis_after = get_analysis_by_experiment(base_rec_id, stage="after")
+        if analysis_after and "features" in analysis_after:
+            after_feat = analysis_after["features"]
+    if not after_feat:
+        try:
+            after_feat = extract_and_save_features(base_rec_id, suffix="_mimic")
+        except Exception:
+            after_feat = None
+
+    # Diagnostic logging
+    missing = []
+    if not before_feat:
+        missing.append("baseline_features")
+    if not after_feat:
+        missing.append("mimicry_features")
+
+    logging.info(
+        "Comparison lookup: comparison_id=%s, baseline_id=%s, mimicry_id=%s, missing=%s",
+        comparison_id, base_rec_id, mimic_rec_id, missing or "none"
+    )
+
+    if not before_feat and not after_feat:
+        return jsonify({
+            "error": "Both baseline and mimicry features required for comparison.",
+            "comparison_id": comparison_id,
+            "baseline_id": base_rec_id,
+            "mimicry_id": mimic_rec_id,
+            "missing": ["baseline_features", "mimicry_features"]
+        }), 404
+
+    if not before_feat:
+        return jsonify({
+            "error": "Both baseline and mimicry features required for comparison.",
+            "detail": f"Baseline feature measurements for experiment '{base_rec_id}' not found. Please extract baseline features first.",
+            "comparison_id": comparison_id,
+            "baseline_id": base_rec_id,
+            "mimicry_id": mimic_rec_id,
+            "missing": ["baseline_features"]
+        }), 404
+
+    if not after_feat:
+        return jsonify({
+            "error": "Both baseline and mimicry features required for comparison.",
+            "detail": f"Mimicry transformation features for experiment '{base_rec_id}' not found. Please apply mimicry first.",
+            "comparison_id": comparison_id,
+            "baseline_id": base_rec_id,
+            "mimicry_id": mimic_rec_id,
+            "missing": ["mimicry_features"]
+        }), 404
+
+    # Step 3: Verify both belong to the intended comparison workflow
+    base_owner = before_feat.get("experiment_id") or before_feat.get("baseline_experiment_id") or base_rec_id
+    mimic_owner = after_feat.get("parent_experiment_id") or after_feat.get("original_experiment_id") or after_feat.get("experiment_id") or base_rec_id
+    if base_owner and mimic_owner and base_owner != mimic_owner:
+        logging.warning("Comparison workflow mismatch: baseline belongs to '%s', mimicry belongs to '%s'", base_owner, mimic_owner)
+        return jsonify({
+            "error": f"Workflow mismatch: Baseline belongs to '{base_owner}' but mimicry belongs to '{mimic_owner}'.",
+            "baseline_id": base_owner,
+            "mimicry_id": mimic_owner
+        }), 400
+
+    # Step 4: Validate required feature fields and numeric values
+    required_num_fields = ["mean_size", "mean_ipt_ms", "jitter_ms", "total_bytes"]
+    invalid_fields = []
+
+    # Normalization of aliases
+    for feat_dict in (before_feat, after_feat):
+        if not feat_dict or not isinstance(feat_dict, dict):
+            continue
+        if "burst_count" not in feat_dict and "burst_cluster_count" in feat_dict:
+            feat_dict["burst_count"] = feat_dict["burst_cluster_count"]
+        elif "burst_cluster_count" not in feat_dict and "burst_count" in feat_dict:
+            feat_dict["burst_cluster_count"] = feat_dict["burst_count"]
+        if "burst_cluster_ratio" not in feat_dict:
+            feat_dict["burst_cluster_ratio"] = 0.0
+        if "mean_size" not in feat_dict and "mean_size_bytes" in feat_dict:
+            feat_dict["mean_size"] = feat_dict["mean_size_bytes"]
+        elif "mean_size_bytes" not in feat_dict and "mean_size" in feat_dict:
+            feat_dict["mean_size_bytes"] = feat_dict["mean_size"]
+        if "jitter_ms" not in feat_dict:
+            feat_dict["jitter_ms"] = feat_dict.get("std_ipt_ms", 0.0)
+        if "total_bytes" not in feat_dict and "packet_count" in feat_dict and "mean_size" in feat_dict:
+            try:
+                feat_dict["total_bytes"] = int(feat_dict["packet_count"] * feat_dict["mean_size"])
+            except Exception:
+                pass
+
+    for name in required_num_fields:
+        val_b = before_feat.get(name)
+        val_a = after_feat.get(name)
+        if val_b is None or not isinstance(val_b, (int, float)):
+            invalid_fields.append(f"baseline.{name}")
+        if val_a is None or not isinstance(val_a, (int, float)):
+            invalid_fields.append(f"mimicry.{name}")
+
+    if invalid_fields:
+        logging.error("Comparison validation failed on missing/non-numeric fields: %s", invalid_fields)
+        return jsonify({
+            "error": f"Invalid feature dataset: missing or non-numeric fields: {', '.join(invalid_fields)}",
+            "invalid_fields": invalid_fields
+        }), 422
+
+    # Step 5: Calculate comparison using actual measurements
+    before_class = (exp.get("classification_before") if exp else None) or classify_traffic(before_feat)
+    after_class = (exp.get("classification_after") if exp else None) or classify_traffic(after_feat)
     target_prof = (exp.get("mimicry_config", {}).get("target_profile") if exp else "voip_call") or "voip_call"
+    overhead = (exp.get("comparison", {}).get("overhead") if exp else None)
+    content_integrity = exp.get("content_integrity_verified") if exp else None
 
     comp = compare_features_and_classification(
-        before_feat, after_feat, before_class, after_class, target_prof
+        before_features=before_feat,
+        after_features=after_feat,
+        before_classification=before_class,
+        after_classification=after_class,
+        target_profile_id=target_prof,
+        overhead=overhead,
+        content_integrity_verified=content_integrity
     )
+
+    # Attach workflow linkage identifiers to result
+    comp["comparison_id"] = comparison_id
+    comp["experiment_id"] = base_rec_id
+    comp["baseline_id"] = base_rec_id
+    comp["mimicry_id"] = mimic_rec_id
+
+    # Step 6: Persist comparison result to JSON storage
+    if not exp:
+        exp = {
+            "id": base_rec_id,
+            "experiment_id": base_rec_id,
+            "created_at": datetime.now().isoformat()
+        }
+    exp.update({
+        "comparison_id": comparison_id,
+        "baseline_experiment_id": base_rec_id,
+        "mimicry_experiment_id": mimic_rec_id,
+        "parent_experiment_id": base_rec_id,
+        "workflow_id": comparison_id,
+        "features_before": before_feat,
+        "features_after": after_feat,
+        "classification_before": before_class,
+        "classification_after": after_class,
+        "comparison": comp,
+        "updated_at": datetime.now().isoformat()
+    })
+    save_experiment(exp)
+
+    # Step 7: Return structured JSON response to frontend
     return jsonify(comp)
 
 

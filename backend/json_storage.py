@@ -343,23 +343,40 @@ def save_experiment(record: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def get_experiment(exp_id: str) -> Optional[Dict[str, Any]]:
-    """Retrieve complete experiment by ID."""
+    """Retrieve complete experiment by ID or linked workflow/mimicry ID."""
     with LOCKS["experiments"]:
         experiments = _read_json(EXPERIMENTS_PATH, list)
-        record = next((e for e in experiments if e.get("id") == exp_id or e.get("experiment_id") == exp_id), None)
+        record = next((
+            e for e in experiments
+            if e.get("id") == exp_id or
+               e.get("experiment_id") == exp_id or
+               e.get("comparison_id") == exp_id or
+               e.get("workflow_id") == exp_id or
+               e.get("mimicry_experiment_id") == exp_id or
+               e.get("baseline_experiment_id") == exp_id or
+               e.get("parent_experiment_id") == exp_id
+        ), None)
         if record:
             return record
 
-    # Fallback to individual file if present
-    indiv_path = EXPERIMENTS_PATH.parent.parent / "experiments" / f"{exp_id}.json"
-    if indiv_path.exists():
-        try:
-            with open(indiv_path, "r", encoding="utf-8") as f:
-                rec = json.load(f)
-                save_experiment(rec)
-                return rec
-        except Exception:
-            return None
+    # Fallback to individual file if present in DATA_DIR / experiments
+    candidates = [
+        DATA_DIR / "experiments" / f"{exp_id}.json",
+        EXPERIMENTS_PATH.parent / "experiments" / f"{exp_id}.json"
+    ]
+    if exp_id.endswith("_mimic"):
+        clean_id = exp_id[:-6]
+        candidates.append(DATA_DIR / "experiments" / f"{clean_id}.json")
+
+    for indiv_path in candidates:
+        if indiv_path.exists():
+            try:
+                with open(indiv_path, "r", encoding="utf-8") as f:
+                    rec = json.load(f)
+                    save_experiment(rec)
+                    return rec
+            except Exception:
+                continue
     return None
 
 
@@ -377,21 +394,34 @@ def list_experiments(
     summaries = []
     for data in experiments:
         exp_id = data.get("id") or data.get("experiment_id", "")
+        config = data.get("config") or {}
+        feat_before = data.get("features_before") or {}
+        class_before = data.get("classification_before") or {}
+        mimic_cfg = data.get("mimicry_config") or {}
+        class_after = data.get("classification_after") or {}
+        comparison = data.get("comparison") or {}
+        text_info = data.get("text_info") or {}
+
         summary = {
             "id": exp_id,
             "created_at": data.get("created_at", ""),
-            "protocol": data.get("config", {}).get("protocol", "TCP"),
-            "payload_mode": data.get("config", {}).get("payload_mode", "pattern"),
-            "packet_count": data.get("features_before", {}).get("packet_count", 0),
-            "category_before": data.get("classification_before", {}).get("category_name", "Unknown"),
-            "confidence_before": data.get("classification_before", {}).get("confidence", 0.0),
-            "target_profile": data.get("mimicry_config", {}).get("target_profile_name", "-"),
-            "category_after": data.get("classification_after", {}).get("category_name", "-"),
-            "confidence_after": data.get("classification_after", {}).get("confidence", 0.0),
-            "fooled": data.get("comparison", {}).get("fooled", False),
-            "status_banner": data.get("comparison", {}).get("status_banner", "BASELINE"),
-            "text_preview": data.get("text_info", {}).get("preview", ""),
-            "file_id": data.get("file_id")
+            "protocol": config.get("protocol", "TCP"),
+            "payload_mode": config.get("payload_mode", "pattern"),
+            "packet_count": feat_before.get("packet_count", 0),
+            "category_before": class_before.get("category_name", "Unknown"),
+            "confidence_before": class_before.get("confidence", 0.0),
+            "target_profile": mimic_cfg.get("target_profile_name", "-"),
+            "category_after": class_after.get("category_name", "-"),
+            "confidence_after": class_after.get("confidence", 0.0),
+            "fooled": comparison.get("fooled", False),
+            "status_banner": comparison.get("status_banner", "BASELINE"),
+            "text_preview": text_info.get("preview", ""),
+            "file_id": data.get("file_id"),
+            "comparison_id": data.get("comparison_id", exp_id),
+            "baseline_experiment_id": data.get("baseline_experiment_id", exp_id),
+            "mimicry_experiment_id": data.get("mimicry_experiment_id"),
+            "has_comparison": bool(comparison),
+            "has_mimicry": bool(data.get("features_after"))
         }
         if search:
             q = search.lower()

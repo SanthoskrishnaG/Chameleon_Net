@@ -1,5 +1,5 @@
 import { API, showToast } from "./api.js";
-import { setupNavigation } from "./nav.js";
+import { setupNavigation, updatePipelineStepperState } from "./nav.js";
 
 let currentExpId = null;
 let selectedProfileId = "voip_call";
@@ -65,6 +65,7 @@ async function loadExperiment(expId) {
     document.getElementById("expIdBadge").innerText = expId;
     const exp = await API.get(`/api/experiments/${expId}`);
     originalExperiment = exp;
+    updatePipelineStepperState(exp, "mimicry");
 
     // Show baseline info
     const bFeat = exp.features_before || {};
@@ -80,6 +81,7 @@ async function loadExperiment(expId) {
     try {
       const featRes = await API.get(`/api/features/${expId}`);
       originalExperiment = { id: expId, features_before: featRes.features_before };
+      updatePipelineStepperState(originalExperiment, "mimicry");
       updatePreview();
     } catch (err) {
       showEmptyState();
@@ -231,6 +233,15 @@ function renderMimicryResults(res) {
   // Update navigation links
   document.getElementById("btnProceedComparison").href = `comparison.html?id=${currentExpId}`;
   document.getElementById("btnProceedClassifierAfter").href = `classifier.html?id=${currentExpId}&stage=after`;
+
+  updatePipelineStepperState({
+    id: currentExpId,
+    features_before: res.classification_before,
+    features_after: res.mimicry_result?.transformed_features,
+    classification_before: res.classification_before,
+    classification_after: res.classification_after,
+    comparison: res.comparison
+  }, "mimicry");
 }
 
 function showEmptyState() {

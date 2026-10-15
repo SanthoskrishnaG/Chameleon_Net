@@ -766,78 +766,53 @@ class TrafficGenerator:
             elif file_match is True:
                 status = "completed"
 
-        with TASKS_LOCK:
-            if exp_id in GENERATION_TASKS:
-                GENERATION_TASKS[exp_id]["status"] = status
-                GENERATION_TASKS[exp_id]["progress"] = 100
-                GENERATION_TASKS[exp_id]["packet_count"] = len(packets)
-                GENERATION_TASKS[exp_id]["all_packets"] = packets
-                GENERATION_TASKS[exp_id]["csv_path"] = str(csv_path)
-                GENERATION_TASKS[exp_id]["reassembled_text"] = reassembled_text
-                GENERATION_TASKS[exp_id]["text_match"] = text_match
-                GENERATION_TASKS[exp_id]["udp_report"] = udp_report
-                GENERATION_TASKS[exp_id]["reassembled_bytes"] = reassembled_bytes
-                GENERATION_TASKS[exp_id]["file_sha256"] = file_sha256
-                GENERATION_TASKS[exp_id]["file_match"] = file_match
-                GENERATION_TASKS[exp_id]["file_id"] = file_id
-                GENERATION_TASKS[exp_id]["storage_path"] = storage_path
-                GENERATION_TASKS[exp_id]["filename"] = filename
-                GENERATION_TASKS[exp_id]["sender_status"] = (
-                    f"Sender: Finished transmitting {len(packets)} packets on 127.0.0.1."
-                )
-                if status == "completed":
-                    GENERATION_TASKS[exp_id]["receiver_status"] = (
-                        "Receiver: Transmission finished. SHA-256 integrity verified 100%."
-                    )
-                elif status == "incomplete":
-                    lost = udp_report.get("lost_count", 0) if udp_report else 0
-                    GENERATION_TASKS[exp_id]["receiver_status"] = (
-                        f"Receiver: Transfer incomplete ({lost} missing chunks). Reconstructed file rejected."
-                    )
-                else:
-                    GENERATION_TASKS[exp_id]["receiver_status"] = (
-                        "Receiver: Checksum verification mismatch. File rejected."
-                    )
+        # JSON persistence integration for all generation modes (file, pattern, custom_text)
+        assigned_file_id = None
+        analysis_id = None
+        feat = {}
+        classification = {}
+        try:
+            from backend.json_storage import (
+                save_transferred_file, save_analysis_result, save_experiment,
+                detect_mime_type, sanitize_filename
+            )
+            from backend.feature_extractor import extract_and_save_features
+            from backend.dpi_classifier import classify_traffic
 
-        # JSON persistence integration for file transfers
-        if payload_mode == "file":
             try:
-                from backend.json_storage import (
-                    save_transferred_file, save_analysis_result, save_experiment,
-                    detect_mime_type
-                )
-                from backend.feature_extractor import extract_and_save_features
-                from backend.dpi_classifier import classify_traffic
-
+                feat = extract_and_save_features(exp_id)
+            except Exception as fe:
+                print(f"Warning: feature extraction error for {exp_id}: {fe}")
                 feat = {}
-                try:
-                    feat = extract_and_save_features(exp_id)
-                except Exception:
-                    pass
-                classification = classify_traffic(feat) if feat else {}
 
-                analysis_id = f"ANALYSIS-{int(time.time()*1000)}-{os.urandom(2).hex()}"
-                analysis_rec = {
-                    "analysis_id": analysis_id,
-                    "file_id": file_id,
-                    "experiment_id": exp_id,
-                    "stage": "before",
-                    "transport_protocol": (params or {}).get("protocol", "TCP"),
-                    "packet_count": len(packets),
-                    "total_bytes": feat.get("total_bytes", sum(p.get("size", 0) for p in packets)),
-                    "mean_size": feat.get("mean_size", 0.0),
-                    "min_size": feat.get("min_size", 0),
-                    "max_size": feat.get("max_size", 0),
-                    "jitter_ms": feat.get("jitter_ms", 0.0),
-                    "throughput_kbps": feat.get("throughput_kbps", 0.0),
-                    "classifier_result": classification,
-                    "classifier_config_version": "1.0.0",
-                    "analysis_timestamp": datetime.now().isoformat(),
-                    "execution_status": "completed" if status == "completed" else "interrupted",
-                    "errors": None if status == "completed" else f"Transfer ended with status: {status}"
-                }
-                save_analysis_result(analysis_rec)
+            classification = classify_traffic(feat) if feat else {}
 
+            analysis_id = f"ANALYSIS-{int(time.time()*1000)}-{os.urandom(2).hex()}"
+            analysis_rec = {
+                "analysis_id": analysis_id,
+                "file_id": file_id,
+                "experiment_id": exp_id,
+                "stage": "before",
+                "transport_protocol": (params or {}).get("protocol", "TCP"),
+                "packet_count": len(packets),
+                "total_bytes": feat.get("total_bytes", sum(p.get("size", 0) for p in packets)),
+                "mean_size": feat.get("mean_size", 0.0),
+                "min_size": feat.get("min_size", 0),
+                "max_size": feat.get("max_size", 0),
+                "jitter_ms": feat.get("jitter_ms", 0.0),
+                "throughput_kbps": feat.get("throughput_kbps", 0.0),
+                "classifier_result": classification,
+                "classifier_config_version": "1.0.0",
+                "analysis_timestamp": datetime.now().isoformat(),
+                "execution_status": "completed" if status == "completed" else "interrupted",
+                "errors": None if status == "completed" else f"Transfer ended with status: {status}"
+            }
+            save_analysis_result(analysis_rec)
+
+            transfer_start = (GENERATION_TASKS.get(exp_id, {})).get("created_at", datetime.now().isoformat())
+            transfer_end = datetime.now().isoformat()
+
+            if payload_mode == "file":
                 assigned_file_id = file_id or f"FILE-{int(time.time()*1000)}-{os.urandom(2).hex()}"
                 file_rec = {
                     "file_id": assigned_file_id,
@@ -853,46 +828,99 @@ class TrafficGenerator:
                     "source_label": "Client (127.0.0.1)",
                     "dest_label": "Server (127.0.0.1)",
                     "storage_path": storage_path or "",
-                    "transfer_started_at": (GENERATION_TASKS.get(exp_id, {})).get("created_at", datetime.now().isoformat()),
-                    "transfer_completed_at": datetime.now().isoformat(),
+                    "transfer_started_at": transfer_start,
+                    "transfer_completed_at": transfer_end,
                     "duration_ms": round(packets[-1]["timestamp"] * 1000.0, 2) if packets else 0.0,
                     "status": status,
                     "experiment_id": exp_id,
                     "analysis_id": analysis_id,
-                    "created_at": datetime.now().isoformat()
+                    "created_at": transfer_end
                 }
                 save_transferred_file(file_rec)
 
-                exp_rec = {
-                    "id": exp_id,
-                    "experiment_id": exp_id,
-                    "file_id": assigned_file_id,
-                    "analysis_before_id": analysis_id,
-                    "created_at": file_rec["transfer_started_at"],
-                    "updated_at": file_rec["transfer_completed_at"],
-                    "status": status,
-                    "config": {
-                        "protocol": (params or {}).get("protocol", "TCP"),
-                        "packet_count": len(packets),
-                        "packet_size": (params or {}).get("packet_size", 512),
-                        "payload_mode": "file",
-                        "filename": filename
-                    },
-                    "features_before": feat,
-                    "classification_before": classification,
-                    "original_checksum": file_rec["sha256"],
-                    "content_integrity_verified": file_rec["integrity_verified"]
+            text_info = None
+            if payload_mode == "custom_text":
+                c_text = (params or {}).get("custom_text", "")
+                text_info = {
+                    "mode": "custom_text",
+                    "length": len(c_text),
+                    "preview": c_text[:40] if c_text else ""
                 }
-                save_experiment(exp_rec)
 
-                with TASKS_LOCK:
-                    if exp_id in GENERATION_TASKS:
-                        GENERATION_TASKS[exp_id]["file_id"] = assigned_file_id
-                        GENERATION_TASKS[exp_id]["analysis_id"] = analysis_id
-                        GENERATION_TASKS[exp_id]["features"] = feat
-                        GENERATION_TASKS[exp_id]["classification"] = classification
-            except Exception as e:
-                print(f"Error persisting file transfer data: {e}")
+            exp_rec = {
+                "id": exp_id,
+                "experiment_id": exp_id,
+                "baseline_experiment_id": exp_id,
+                "comparison_id": exp_id,
+                "workflow_id": exp_id,
+                "file_id": assigned_file_id,
+                "analysis_before_id": analysis_id,
+                "created_at": transfer_start,
+                "updated_at": transfer_end,
+                "status": status,
+                "config": {
+                    "protocol": (params or {}).get("protocol", "TCP"),
+                    "packet_count": len(packets),
+                    "packet_size": (params or {}).get("packet_size", 512),
+                    "interval_ms": (params or {}).get("interval_ms", 10),
+                    "payload_mode": payload_mode,
+                    "payload_pattern": (params or {}).get("payload_pattern", "random"),
+                    "direction": (params or {}).get("direction", "client->server"),
+                    "filename": filename if payload_mode == "file" else None,
+                    "custom_text": (params or {}).get("custom_text") if payload_mode == "custom_text" else None
+                },
+                "features_before": feat,
+                "classification_before": classification,
+                "text_info": text_info,
+                "reassembled_text": reassembled_text,
+                "text_preserved": text_match,
+                "original_checksum": (params or {}).get("sent_sha256", file_sha256 or ""),
+                "content_integrity_verified": bool(file_match and status == "completed") if payload_mode == "file" else (bool(text_match) if payload_mode == "custom_text" else True)
+            }
+            save_experiment(exp_rec)
+
+            persistence_success = True
+        except Exception as pe:
+            print(f"Error persisting experiment data for {exp_id}: {pe}")
+            persistence_success = False
+            status = "failed"
+
+        # Update task status only after persistence attempt
+        with TASKS_LOCK:
+            if exp_id in GENERATION_TASKS:
+                GENERATION_TASKS[exp_id]["status"] = status
+                GENERATION_TASKS[exp_id]["progress"] = 100
+                GENERATION_TASKS[exp_id]["packet_count"] = len(packets)
+                GENERATION_TASKS[exp_id]["all_packets"] = packets
+                GENERATION_TASKS[exp_id]["csv_path"] = str(csv_path)
+                GENERATION_TASKS[exp_id]["reassembled_text"] = reassembled_text
+                GENERATION_TASKS[exp_id]["text_match"] = text_match
+                GENERATION_TASKS[exp_id]["udp_report"] = udp_report
+                GENERATION_TASKS[exp_id]["reassembled_bytes"] = reassembled_bytes
+                GENERATION_TASKS[exp_id]["file_sha256"] = file_sha256
+                GENERATION_TASKS[exp_id]["file_match"] = file_match
+                GENERATION_TASKS[exp_id]["file_id"] = assigned_file_id
+                GENERATION_TASKS[exp_id]["analysis_id"] = analysis_id
+                GENERATION_TASKS[exp_id]["features"] = feat
+                GENERATION_TASKS[exp_id]["classification"] = classification
+                GENERATION_TASKS[exp_id]["storage_path"] = storage_path
+                GENERATION_TASKS[exp_id]["filename"] = filename
+                GENERATION_TASKS[exp_id]["sender_status"] = (
+                    f"Sender: Finished transmitting {len(packets)} packets on 127.0.0.1."
+                )
+                if status == "completed":
+                    GENERATION_TASKS[exp_id]["receiver_status"] = (
+                        "Receiver: Transmission finished and baseline features persisted."
+                    )
+                elif status == "incomplete":
+                    lost = udp_report.get("lost_count", 0) if udp_report else 0
+                    GENERATION_TASKS[exp_id]["receiver_status"] = (
+                        f"Receiver: Transfer incomplete ({lost} missing chunks). Reconstructed file rejected."
+                    )
+                else:
+                    GENERATION_TASKS[exp_id]["receiver_status"] = (
+                        "Receiver: Transmission or persistence verification failed."
+                    )
 
 
 def get_task_status(exp_id: str) -> Optional[Dict[str, Any]]:

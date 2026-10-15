@@ -106,18 +106,22 @@ export function renderIPTLineChart(canvasId, iptSample) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !window.Chart) return null;
 
+  const dataPoints = Array.isArray(iptSample) && iptSample.length > 0 ? iptSample : [0];
+  const labels = dataPoints.map((_, i) => `#${i + 1}`);
+
   return new window.Chart(canvas, {
     type: "line",
     data: {
-      labels: iptSample.map((_, i) => `#${i + 1}`),
+      labels: labels,
       datasets: [{
         label: "Inter-Packet Time (ms)",
-        data: iptSample,
+        data: dataPoints,
         borderColor: "#0D9488",
         backgroundColor: "rgba(13, 148, 136, 0.08)",
         fill: true,
         tension: 0.3,
-        pointRadius: 2
+        pointRadius: dataPoints.length === 1 ? 5 : 2,
+        pointHoverRadius: 6
       }]
     },
     options: {
@@ -129,6 +133,7 @@ export function renderIPTLineChart(canvasId, iptSample) {
       scales: {
         y: {
           beginAtZero: true,
+          suggestedMax: 10,
           grid: { color: "#F1F5F9" }
         },
         x: {
